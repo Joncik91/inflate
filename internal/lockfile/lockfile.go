@@ -34,6 +34,12 @@ func Acquire(path string) (*Lock, error) {
 			_ = os.Remove(path)
 			continue
 		}
+		// Alive — but only block if it's actually inflate. A reused PID
+		// belonging to some other process should not stop us.
+		if !processIsInflate(pid) {
+			_ = os.Remove(path)
+			continue
+		}
 		return nil, fmt.Errorf("already running (PID %d); use --force to override", pid)
 	}
 	return nil, errors.New("lockfile race lost twice")

@@ -32,16 +32,24 @@ var (
 	stackTraceRE = regexp.MustCompile(`(?m)^[^a-z\n]*\b(panicked|Traceback|Error|Exception|panic:|fatal)\b.*$`)
 )
 
-// CollectJSONL tails the most-recently-modified *.jsonl file in dir and
-// returns a compact context block. ok=false means no JSONL files exist.
+// CollectJSONL is the harvester hot path. Use DiagnoseJSONL when you need the
+// underlying error (e.g. `inflate doctor`).
 func CollectJSONL(dir string) (string, bool) {
+	out, ok, _ := DiagnoseJSONL(dir)
+	return out, ok
+}
+
+// DiagnoseJSONL tails the most-recently-modified *.jsonl file in dir and
+// returns a compact context block, ok flag, and the underlying error.
+// ok=false with a non-nil error means no JSONL files exist or they are empty.
+func DiagnoseJSONL(dir string) (string, bool, error) {
 	path, ok := newestJSONL(dir)
 	if !ok {
-		return "", false
+		return "", false, fmt.Errorf("no *.jsonl files in %s (Claude Code session not started here yet)", dir)
 	}
 	events := readLastEvents(path, maxEvents)
 	if len(events) == 0 {
-		return "", false
+		return "", false, fmt.Errorf("%s has no parseable events", path)
 	}
 
 	var sb strings.Builder
@@ -98,7 +106,7 @@ func CollectJSONL(dir string) (string, bool) {
 	if len(out) > maxJSONLBytes {
 		out = out[:maxJSONLBytes] + "\n…(truncated)\n"
 	}
-	return out, true
+	return out, true, nil
 }
 
 func newestJSONL(dir string) (string, bool) {

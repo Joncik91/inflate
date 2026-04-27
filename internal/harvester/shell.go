@@ -2,14 +2,22 @@ package harvester
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-// CollectShell returns the last ~20 lines of the user's shell history file.
-// ok=false means no history file is readable.
+// CollectShell is the harvester hot path. Use DiagnoseShell when you need the
+// underlying error (e.g. `inflate doctor`).
 func CollectShell() (string, bool) {
+	out, ok, _ := DiagnoseShell()
+	return out, ok
+}
+
+// DiagnoseShell returns the last ~20 lines of the user's shell history file,
+// ok flag, and the underlying error when no readable history is found.
+func DiagnoseShell() (string, bool, error) {
 	candidates := []string{}
 	if h := os.Getenv("HISTFILE"); h != "" {
 		candidates = append(candidates, h)
@@ -33,9 +41,9 @@ func CollectShell() (string, bool) {
 		if len(lines) == 0 {
 			continue
 		}
-		return strings.Join(lines, "\n"), true
+		return strings.Join(lines, "\n"), true, nil
 	}
-	return "", false
+	return "", false, fmt.Errorf("no readable shell history in %v", candidates)
 }
 
 func tailLines(f *os.File, n int) []string {

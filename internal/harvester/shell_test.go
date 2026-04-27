@@ -8,6 +8,19 @@ import (
 	"testing"
 )
 
+func TestDiagnoseShellNoFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("HISTFILE", "")
+	_, ok, err := DiagnoseShell()
+	if ok {
+		t.Errorf("expected ok=false when no history")
+	}
+	if err == nil {
+		t.Errorf("expected non-nil err when no history readable")
+	}
+}
+
 func TestCollectShellNoFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
