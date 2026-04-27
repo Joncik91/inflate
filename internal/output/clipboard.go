@@ -5,25 +5,19 @@ package output
 import (
 	"fmt"
 
-	"golang.design/x/clipboard"
+	"github.com/atotto/clipboard"
 )
 
-var clipboardReady bool
-
-// Init must be called once before any clipboard call.
+// Init is a no-op for atotto/clipboard but kept for API symmetry. It returns
+// nil unless clipboard.Unsupported is true (no clipboard backend available).
 func Init() error {
-	if err := clipboard.Init(); err != nil {
-		return fmt.Errorf("clipboard init: %w", err)
+	if clipboard.Unsupported {
+		return fmt.Errorf("no clipboard backend available (install xclip or xsel on Linux)")
 	}
-	clipboardReady = true
 	return nil
 }
 
 // WriteClipboard puts text on the system clipboard.
 func WriteClipboard(text string) error {
-	if !clipboardReady {
-		return fmt.Errorf("clipboard not initialized")
-	}
-	clipboard.Write(clipboard.FmtText, []byte(text))
-	return nil
+	return clipboard.WriteAll(text)
 }
