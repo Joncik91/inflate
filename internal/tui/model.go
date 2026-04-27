@@ -109,10 +109,12 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.seed) > 0 {
 			m.seed = m.seed[:len(m.seed)-1]
 		}
+	case " ", "space":
+		m.seed += " "
 	default:
 		if k.Type == tea.KeyRunes {
 			m.seed += string(k.Runes)
-		} else if k.String() == "space" {
+		} else if k.Type == tea.KeySpace {
 			m.seed += " "
 		}
 	}
