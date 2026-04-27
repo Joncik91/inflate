@@ -114,26 +114,26 @@ func runDoctor(ping bool) string {
 		if gErr != nil && strings.Contains(gErr.Error(), "dubious ownership") {
 			hint = "git refuses to read this repo as the current user. Run: git config --global --add safe.directory " + cwd
 		}
-		add(false, "harvester: git — "+errMsg(gErr), hint)
+		add(false, "harvester: git — "+flatErr(gErr), hint)
 	}
 
 	if _, ok, sErr := harvester.DiagnoseShell(); ok {
 		add(true, "harvester: shell history", "")
 	} else {
-		add(false, "harvester: shell history", errMsg(sErr))
+		add(false, "harvester: shell history", flatErr(sErr))
 	}
 
 	if _, ok, fErr := harvester.DiagnoseFile(cwd); ok {
 		add(true, "harvester: open editor file", "")
 	} else {
-		add(false, "harvester: open editor file (warn-only)", errMsg(fErr))
+		add(false, "harvester: open editor file (warn-only)", flatErr(fErr))
 	}
 
 	jsonlDir := filepath.Join(homeDir(), ".claude", "projects", harvester.ProjectDirName(cwd))
 	if _, ok, jErr := harvester.DiagnoseJSONL(jsonlDir); ok {
 		add(true, "harvester: jsonl session", "")
 	} else {
-		add(false, "harvester: jsonl session (warn-only)", errMsg(jErr))
+		add(false, "harvester: jsonl session (warn-only)", flatErr(jErr))
 	}
 
 	lockPath := filepath.Join(cfgDir, "run.lock")
@@ -146,6 +146,24 @@ func runDoctor(ping bool) string {
 	}
 
 	return b.String()
+}
+
+// flatErr is errMsg + newline collapse. Some collectors propagate underlying
+// errors that include embedded newlines (notably git stderr like "dubious
+// ownership ... To add an exception ..."). Doctor renders one check per line,
+// so we collapse interior whitespace to keep the line readable. The full
+// command the user needs is preserved in the hint we pass to add().
+func flatErr(err error) string {
+	if err == nil {
+		return "(no detail)"
+	}
+	s := err.Error()
+	s = strings.ReplaceAll(s, "\t", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	for strings.Contains(s, "  ") {
+		s = strings.ReplaceAll(s, "  ", " ")
+	}
+	return strings.TrimSpace(s)
 }
 
 // errMsg returns the error string or a fallback if err is nil.
