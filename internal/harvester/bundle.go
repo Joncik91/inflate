@@ -4,6 +4,7 @@ import "fmt"
 
 // ContextBundle is the snapshot of harvested context published to the inflater.
 type ContextBundle struct {
+	Cwd     string `json:"cwd,omitempty"`
 	Profile string `json:"profile,omitempty"`
 	Git     string `json:"git,omitempty"`
 	Shell   string `json:"shell,omitempty"`

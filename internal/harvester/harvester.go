@@ -136,6 +136,7 @@ func (h *Harvester) collectOnce() {
 	wg.Wait()
 
 	bundle := ContextBundle{
+		Cwd:       h.opts.ProjectDir,
 		Profile:   profile,
 		Git:       git,
 		Shell:     shell,
