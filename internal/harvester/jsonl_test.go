@@ -5,6 +5,17 @@ import (
 	"testing"
 )
 
+func TestDiagnoseJSONLNoFile(t *testing.T) {
+	dir := t.TempDir()
+	_, ok, err := DiagnoseJSONL(dir)
+	if ok {
+		t.Errorf("expected ok=false on empty dir")
+	}
+	if err == nil {
+		t.Errorf("expected non-nil err when no jsonl files")
+	}
+}
+
 func TestCollectJSONLNoFile(t *testing.T) {
 	dir := t.TempDir()
 	got, ok := CollectJSONL(dir)

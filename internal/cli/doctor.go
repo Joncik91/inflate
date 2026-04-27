@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Joncik91/inflate/internal/config"
+	"github.com/Joncik91/inflate/internal/harvester"
 	"github.com/Joncik91/inflate/internal/provider"
 )
 
@@ -96,6 +97,45 @@ func runDoctor(ping bool) string {
 		add(false, "~/.claude/projects exists (warn-only)", "Claude Code hasn't been launched yet on this machine")
 	}
 
+	// Harvester collectors — surface underlying errors so the user can fix
+	// what's broken (e.g. "git config safe.directory ..."), not just see a
+	// silent ✗ in the TUI status line.
+	cwd, _ := os.Getwd()
+	if cfgErr == nil {
+		if root, rerr := config.ResolveCwd(""); rerr == nil {
+			cwd = root
+		}
+	}
+
+	if _, ok, gErr := harvester.DiagnoseGit(cwd); ok {
+		add(true, "harvester: git in "+cwd, "")
+	} else {
+		hint := "not a git repo, or run: git config --global --add safe.directory " + cwd
+		if gErr != nil && strings.Contains(gErr.Error(), "dubious ownership") {
+			hint = "git refuses to read this repo as the current user. Run: git config --global --add safe.directory " + cwd
+		}
+		add(false, "harvester: git — "+errMsg(gErr), hint)
+	}
+
+	if _, ok, sErr := harvester.DiagnoseShell(); ok {
+		add(true, "harvester: shell history", "")
+	} else {
+		add(false, "harvester: shell history", errMsg(sErr))
+	}
+
+	if _, ok, fErr := harvester.DiagnoseFile(cwd); ok {
+		add(true, "harvester: open editor file", "")
+	} else {
+		add(false, "harvester: open editor file (warn-only)", errMsg(fErr))
+	}
+
+	jsonlDir := filepath.Join(homeDir(), ".claude", "projects", harvester.ProjectDirName(cwd))
+	if _, ok, jErr := harvester.DiagnoseJSONL(jsonlDir); ok {
+		add(true, "harvester: jsonl session", "")
+	} else {
+		add(false, "harvester: jsonl session (warn-only)", errMsg(jErr))
+	}
+
 	lockPath := filepath.Join(cfgDir, "run.lock")
 	if data, err := os.ReadFile(lockPath); err == nil {
 		pidStr := strings.TrimSpace(strings.SplitN(string(data), "\n", 2)[0])
@@ -106,6 +146,14 @@ func runDoctor(ping bool) string {
 	}
 
 	return b.String()
+}
+
+// errMsg returns the error string or a fallback if err is nil.
+func errMsg(err error) string {
+	if err == nil {
+		return "(no detail)"
+	}
+	return err.Error()
 }
 
 func dirExists(p string) bool {
