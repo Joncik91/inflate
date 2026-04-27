@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -65,8 +66,14 @@ func TestWriteEnvVarCreatesFileWithMode0600(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mode := info.Mode().Perm(); mode != 0o600 {
-		t.Errorf("file mode = %o, want 600", mode)
+	// Windows ignores POSIX file modes — NTFS reports 0666 regardless of
+	// what we pass to os.WriteFile. Real "owner only" semantics on Windows
+	// require ACL manipulation, which is a v0.2 hardening item. For now,
+	// only enforce the strict mode on POSIX systems.
+	if runtime.GOOS != "windows" {
+		if mode := info.Mode().Perm(); mode != 0o600 {
+			t.Errorf("file mode = %o, want 600", mode)
+		}
 	}
 	data, _ := os.ReadFile(path)
 	if !strings.Contains(string(data), "ANTHROPIC_API_KEY=sk-ant-xyz") {
