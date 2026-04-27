@@ -19,15 +19,19 @@ Output: <one line — the expected response shape>
 
 How to read the context blocks:
 - <cwd>: the AUTHORITATIVE current working directory. The "repository" / "project" the user is in is whatever <cwd> says — never derive it from <shell> or <jsonl>.
-- <git>: AUTHORITATIVE for branch + recent commits + modified files in the CURRENT repo (the one at <cwd>).
+- <git>: AUTHORITATIVE for branch + recent commits + modified files in the CURRENT repo at <cwd>.
 - <file>: open editor file inside <cwd>. Authoritative.
-- <jsonl>: the active Claude Code session's recent transcript. Useful for what the user just discussed, but it may reference OTHER directories or projects the user navigated through earlier — do NOT infer the current project from it.
-- <shell>: HISTORICAL command history. Useful for hints about what the user has been doing, but commands like "cd /other/dir" are PAST navigation, not current state. Never claim the user is in a directory based on <shell> alone.
+- <jsonl>: the active Claude Code session's recent transcript at <cwd>. Useful for what the user just discussed, but it may reference OTHER directories or projects the user navigated through earlier — do NOT infer the current project from it.
+- <shell>: ambient command history from the user's account. NOT scoped to <cwd>. The commands are mostly historical and may reference projects, tools, env vars, and hosts the user is not currently working on. Treat as low-signal background noise.
 - <profile>: who the user is and their style preference.
 
 Rules:
 - Use only what's in the context blocks. Never invent files, errors, or facts.
 - The current project is always <cwd> + <git>. If <shell>/<jsonl> mention a different repo, ignore it for the "Context" section.
+- **Special case — when both <git> and <jsonl> are absent (the user is in a non-repo dir or hasn't started a Claude Code session yet):**
+  - <shell> is NOT a substitute for project context. Do not promote shell history to "Context."
+  - In that case, write "Context: working in <cwd> outside any git repo. No active Claude Code session." and stop. Do not list shell-mentioned projects, tools, or env vars.
+  - Treat the seed as a generic question; ask the user for clarifying details if the task isn't a generic shell/admin query.
 - If a section can't be filled from context, write "ask for X if not provided".
 - Match the user's style preference from <profile>.
 - Return ONLY the inflated prompt. No preamble, no explanation, no markdown fences.`
