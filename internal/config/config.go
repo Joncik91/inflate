@@ -74,6 +74,21 @@ func SaveProfile(p Profile) error {
 	return toml.NewEncoder(f).Encode(p)
 }
 
+// SaveConfig writes config.toml, creating the dir if needed.
+// This is what the first-run wizard calls after the user picks a provider.
+// We deliberately do NOT write inline api_key here — keys live in .env.
+func SaveConfig(c Config) error {
+	if err := os.MkdirAll(ConfigDir(), 0o755); err != nil {
+		return err
+	}
+	f, err := os.Create(filepath.Join(ConfigDir(), "config.toml"))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return toml.NewEncoder(f).Encode(c)
+}
+
 // LoadConfig reads config.toml. Returns zero Config + os.ErrNotExist if missing.
 func LoadConfig() (Config, error) {
 	path := filepath.Join(ConfigDir(), "config.toml")
