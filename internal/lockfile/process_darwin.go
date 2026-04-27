@@ -1,11 +1,15 @@
-//go:build linux
+//go:build darwin
 
 package lockfile
 
 import (
+	"context"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // processAlive returns true if pid identifies a running process.
@@ -20,13 +24,12 @@ func processAlive(pid int) bool {
 	return p.Signal(syscall.Signal(0)) == nil
 }
 
-// processIsInflate reads /proc/<pid>/comm to check whether the process
-// running as pid is inflate. Returns false on any error (fail-closed:
-// caller will keep blocking; user can pass --force).
+// processIsInflate shells out to `ps` because /proc isn't available on macOS.
+// Fail-closed: any error returns false.
 //
 // Special case: if pid is the current process we always return true.
-// This preserves the double-launch guard when a live inflate process
-// calls Acquire a second time (e.g. due to a race at startup).
+// This preserves the double-launch guard when a live inflate calls Acquire
+// a second time.
 func processIsInflate(pid int) bool {
 	if pid <= 0 {
 		return false
@@ -34,16 +37,17 @@ func processIsInflate(pid int) bool {
 	if pid == os.Getpid() {
 		return true
 	}
-	data, err := os.ReadFile("/proc/" + itoa(pid) + "/comm")
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "ps", "-p", itoaDarwin(pid), "-o", "comm=").Output()
 	if err != nil {
 		return false
 	}
-	name := strings.TrimSpace(string(data))
-	return name == "inflate"
+	name := strings.TrimSpace(string(out))
+	return filepath.Base(name) == "inflate"
 }
 
-func itoa(i int) string {
-	// avoid pulling strconv just for this hot path
+func itoaDarwin(i int) string {
 	if i == 0 {
 		return "0"
 	}
