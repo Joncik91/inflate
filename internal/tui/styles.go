@@ -4,7 +4,7 @@ import "github.com/charmbracelet/lipgloss"
 
 var (
 	previewStyle      = lipgloss.NewStyle().Padding(1, 2).Border(lipgloss.RoundedBorder())
-	previewDimStyle   = previewStyle.Copy().Faint(true)
+	previewDimStyle   = previewStyle.Faint(true)
 	statusStyleOK     = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
 	statusStyleWarn   = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
 	statusStyleErr    = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
