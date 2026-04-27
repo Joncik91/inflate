@@ -7,7 +7,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 // Lock represents an acquired single-instance lock.
@@ -43,14 +42,3 @@ func Acquire(path string) (*Lock, error) {
 // Release removes the lockfile.
 func (l *Lock) Release() { _ = os.Remove(l.path) }
 
-func processAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	// Signal 0 = "is the process there?"
-	return p.Signal(syscall.Signal(0)) == nil
-}

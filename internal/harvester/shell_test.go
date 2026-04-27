@@ -3,6 +3,7 @@ package harvester
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -18,6 +19,9 @@ func TestCollectShellNoFile(t *testing.T) {
 }
 
 func TestCollectShellFromFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("HOME env var doesn't redirect os.UserHomeDir on Windows; collector behavior is correct (no bash/zsh history) but the test setup can't be exercised")
+	}
 	dir := t.TempDir()
 	hist := filepath.Join(dir, ".bash_history")
 	lines := ""
