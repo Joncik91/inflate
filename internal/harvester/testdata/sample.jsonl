@@ -1,0 +1,5 @@
+{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-04-27T10:00:00Z","cwd":"/tmp/foo"}
+{"type":"assistant","message":{"role":"assistant","content":"hi back, edit src/main.go please"},"timestamp":"2026-04-27T10:00:01Z"}
+{"type":"user","message":{"role":"user","content":"fix the panic at src/foo.rs:47"},"timestamp":"2026-04-27T10:00:02Z"}
+{"type":"assistant","message":{"role":"assistant","content":"thread 'main' panicked at src/foo.rs:47\ncalled Option::unwrap() on None"},"timestamp":"2026-04-27T10:00:03Z"}
+{"type":"user","message":{"role":"user","content":"now run the tests"},"timestamp":"2026-04-27T10:00:04Z"}
