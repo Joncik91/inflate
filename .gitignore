@@ -1,0 +1,8 @@
+inflate
+inflate.exe
+/dist/
+/.cache/
+*.log
+.envrc
+.env
+coverage.out
