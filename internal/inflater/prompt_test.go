@@ -16,6 +16,21 @@ func TestSystemPromptIncludesSkeleton(t *testing.T) {
 	}
 }
 
+func TestSystemPromptFramesOutputForDownstream(t *testing.T) {
+	s := SystemPrompt(harvester.ContextBundle{ProfileOK: true})
+	wants := []string{
+		"DOWNSTREAM coding assistant",
+		"Write FOR the downstream assistant",
+		"Tool-name taboo",
+		"inflate",
+	}
+	for _, w := range wants {
+		if !strings.Contains(s, w) {
+			t.Errorf("system prompt missing %q\nsystem prompt:\n%s", w, s)
+		}
+	}
+}
+
 func TestSystemPromptHasJSONLExplorationRule(t *testing.T) {
 	s := SystemPrompt(harvester.ContextBundle{ProfileOK: true})
 	// Three-part rule: presence of jsonl is a fact (session is active),
