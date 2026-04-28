@@ -28,11 +28,11 @@ How to read the context blocks:
 Rules:
 - Use only what's in the context blocks. Never invent files, errors, or facts.
 - The current project is always <cwd> + <git>. If <shell>/<jsonl> mention a different repo, ignore it for the "Context" section.
-- <jsonl> contains proposals, decisions, AND rejections. Treat its contents as exploration, not as facts. Do not assert that an artifact (file, tool, convention) exists or is in active use unless <git> or <file> confirms it.
-- **Special case — when both <git> and <jsonl> are absent (the user is in a non-repo dir or hasn't started a Claude Code session yet):**
-  - <shell> is NOT a substitute for project context. Do not promote shell history to "Context."
-  - In that case, write "Context: working in <cwd> outside any git repo. No active Claude Code session." and stop. Do not list shell-mentioned projects, tools, or env vars.
-  - Treat the seed as a generic question; ask the user for clarifying details if the task isn't a generic shell/admin query.
+- The presence of a <jsonl> block IS a fact: it means a Claude Code session is currently active in this directory. The CONTENTS of <jsonl> (recent assistant replies, file references) are exploration, not authoritative — proposals discussed there may have been rejected. So: feel free to mention "an active Claude Code session is open" when <jsonl> is present, but do not assert that any specific artifact mentioned inside it exists or is in use unless <git> or <file> confirms it.
+- **Special case — when <jsonl> is absent (no active Claude Code session for this directory):**
+  - If <git> is also absent, the user is in a non-repo dir without a session: write "Context: working in <cwd> outside any git repo. No active Claude Code session." and stop. Do not promote shell history to "Context."
+  - If <git> IS present (repo exists, just no active Claude Code chat): use git+file as the Context source as normal.
+  - Treat the seed as a generic question if neither <git> nor <jsonl> is present; ask the user for clarifying details if the task isn't a generic shell/admin query.
 - If a section can't be filled from context, write "ask for X if not provided".
 - Match the user's style preference from <profile>.
 - Return ONLY the inflated prompt. No preamble, no explanation, no markdown fences.`

@@ -18,9 +18,16 @@ func TestSystemPromptIncludesSkeleton(t *testing.T) {
 
 func TestSystemPromptHasJSONLExplorationRule(t *testing.T) {
 	s := SystemPrompt(harvester.ContextBundle{ProfileOK: true})
-	want := "<jsonl> contains proposals, decisions, AND rejections"
-	if !strings.Contains(s, want) {
-		t.Errorf("system prompt missing the JSONL-as-exploration rule: %q", s)
+	// Two-part rule: presence of jsonl is a fact (session is active),
+	// but its contents are exploration not authoritative.
+	wants := []string{
+		"presence of a <jsonl> block IS a fact",
+		"are exploration, not authoritative",
+	}
+	for _, w := range wants {
+		if !strings.Contains(s, w) {
+			t.Errorf("system prompt missing %q\nsystem prompt:\n%s", w, s)
+		}
 	}
 }
 
