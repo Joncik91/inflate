@@ -163,6 +163,14 @@ func (h *Harvester) collectOnce() {
 		JSONLOK:     jsonlOK,
 		ProcessesOK: procsOK,
 	}
+	// Only scan for neighbor repos when the current cwd itself isn't a
+	// repo. Avoids scanning immediate-children when the user is already
+	// inside a working repo (cheap but still pointless work).
+	if !gitOK {
+		if repos, err := config.NeighborRepos(h.opts.ProjectDir); err == nil {
+			bundle.NeighborRepos = repos
+		}
+	}
 
 	// scrub each section independently so flag accuracy is preserved
 	scrubTotal := 0

@@ -15,6 +15,12 @@ type ContextBundle struct {
 	JSONL     string `json:"jsonl,omitempty"`
 	Processes string `json:"processes,omitempty"`
 
+	// NeighborRepos lists immediate-child directory names of Cwd that
+	// contain a .git entry. Populated only when Cwd itself isn't a repo,
+	// so the TUI can surface "did you mean to run from one of: inflate,
+	// Codexbar-fork, …?" Empty otherwise.
+	NeighborRepos []string `json:"neighbor_repos,omitempty"`
+
 	Redacted int `json:"redacted,omitempty"`
 
 	ProfileOK   bool `json:"-"`

@@ -70,6 +70,48 @@ func TestResolveCwdGitAsFile(t *testing.T) {
 	}
 }
 
+func TestNeighborReposFindsChildGitDirs(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"alpha", "beta", "gamma"} {
+		if err := os.MkdirAll(filepath.Join(root, name, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A non-repo subdir should be ignored.
+	if err := os.MkdirAll(filepath.Join(root, "not-a-repo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A hidden dir should be ignored even if it has .git inside.
+	if err := os.MkdirAll(filepath.Join(root, ".cache", ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := NeighborRepos(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"alpha", "beta", "gamma"}
+	if len(got) != len(want) {
+		t.Fatalf("got %d repos %v, want %d %v", len(got), got, len(want), want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("repos[%d] = %q, want %q", i, got[i], w)
+		}
+	}
+}
+
+func TestNeighborReposEmpty(t *testing.T) {
+	root := t.TempDir()
+	got, err := NeighborRepos(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected no repos, got %v", got)
+	}
+}
+
 func TestResolveCwdNoGitFallsBackToPwd(t *testing.T) {
 	root := t.TempDir() // no .git anywhere
 	deep := filepath.Join(root, "a", "b")
