@@ -58,8 +58,11 @@ After setup: open `claude` in Terminal A, run `inflate` in Terminal B, type a fr
 |---|---|
 | Enter | inflate, copy to clipboard |
 | Tab | force inflate now (skip the 600 ms idle wait) |
-| Esc | clear input + preview |
+| Esc | dismiss errors, then clear input + preview |
+| `?` | toggle help overlay |
 | Ctrl-C | quit |
+
+The TUI streams the inflated prompt in as it arrives. While waiting for the first token a `⠹ Inflating…` spinner shows below the preview. Errors sit in a red banner until you type or press Esc — they don't flash by.
 
 ## Top-level flags
 
@@ -121,8 +124,10 @@ Lists every startup check with `[✓]` / `[✗]`. Most "inflate keeps asking for
 
 ## Status
 
-v0.1.1 — interactive setup, dotenv-backed keys, smart `--cwd`, lockfile self-cleanup, `doctor` + `config edit` subcommands.
+v0.1.3 — plain-English status legend, streaming preview with spinner, `?` help overlay, persistent error banner, named-section preview rendering, prompt-quality fix for non-git directories.
 
-Streaming-per-chunk TUI delivery and the PTY wrapper still land in v0.2.
+Built on v0.1.2 (session-aware JSONL picker), v0.1.1 (interactive setup, dotenv-backed keys, smart `--cwd`, lockfile self-cleanup, `doctor` + `config edit` subcommands), and v0 (TUI, BYOK, harvester, Promptism prompt skeleton).
 
-See `docs/superpowers/specs/2026-04-27-inflate-design.md` for the full design.
+PTY wrapper for watch-as-you-type still deferred.
+
+See `docs/superpowers/specs/2026-04-27-inflate-design.md` for the full design and the canonical deferred list.
