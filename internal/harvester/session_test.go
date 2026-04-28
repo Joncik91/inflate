@@ -32,7 +32,10 @@ func TestFindActiveSessionPrefersBusyOverIdle(t *testing.T) {
 	root := t.TempDir()
 	sessionsDir := filepath.Join(root, "sessions")
 	projectsDir := filepath.Join(root, "projects")
-	projectDir := "/home/u/work/repo"
+	projectDir := filepath.Join(root, "work", "repo")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	hash := ProjectDirName(projectDir)
 	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -62,7 +65,10 @@ func TestFindActiveSessionFiltersOtherCwd(t *testing.T) {
 	root := t.TempDir()
 	sessionsDir := filepath.Join(root, "sessions")
 	projectsDir := filepath.Join(root, "projects")
-	projectDir := "/home/u/work/repo"
+	projectDir := filepath.Join(root, "work", "repo")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +86,10 @@ func TestFindActiveSessionSkipsExited(t *testing.T) {
 	root := t.TempDir()
 	sessionsDir := filepath.Join(root, "sessions")
 	projectsDir := filepath.Join(root, "projects")
-	projectDir := "/home/u/work/repo"
+	projectDir := filepath.Join(root, "work", "repo")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +107,10 @@ func TestFindActiveSessionSkipsDeadPid(t *testing.T) {
 	root := t.TempDir()
 	sessionsDir := filepath.Join(root, "sessions")
 	projectsDir := filepath.Join(root, "projects")
-	projectDir := "/home/u/work/repo"
+	projectDir := filepath.Join(root, "work", "repo")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +129,10 @@ func TestFindActiveSessionMissingJSONL(t *testing.T) {
 	root := t.TempDir()
 	sessionsDir := filepath.Join(root, "sessions")
 	projectsDir := filepath.Join(root, "projects")
-	projectDir := "/home/u/work/repo"
+	projectDir := filepath.Join(root, "work", "repo")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
