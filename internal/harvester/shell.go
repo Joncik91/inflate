@@ -48,14 +48,18 @@ func DiagnoseShell() (string, bool, error) {
 	return "", false, fmt.Errorf("no readable shell history in %v", candidates)
 }
 
-// pathRE captures both absolute paths (/foo/bar) and relative-style path
-// fragments (foo/bar/baz) in shell history. The latter catches cases like
-// `cd inflate-impl/internal/tui` where the regex for absolute paths would
-// miss the leak. We require at least one separator to avoid matching
-// every plain word, and intentionally have NO upper segment cap so deep
-// paths (macOS /var/folders/tb/.../T/.../leaf) get checked at the leaf
+// pathRE captures path-like tokens in shell history. Matches:
+//   - Unix absolute paths           /home/u/apps/inflate
+//   - Unix relative-style fragments inflate-impl/internal/tui
+//   - Windows absolute paths        C:\Users\foo\bar
+//   - Windows relative fragments    src\internal\foo
+//
+// Requires at least one separator (forward or back slash) to avoid
+// matching every plain word. NO upper segment cap so deep paths
+// (macOS /var/folders/tb/.../T/.../leaf or Windows
+// C:\Users\RUNNER~1\AppData\Local\Temp\...) get checked at the leaf
 // rather than at a still-existing prefix.
-var pathRE = regexp.MustCompile(`(?:^|[\s'"])(/?[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+)`)
+var pathRE = regexp.MustCompile(`(?:^|[\s'"])([A-Za-z]:[\\/][^\s'"]+|/?[A-Za-z0-9._-]+(?:[\\/][A-Za-z0-9._-]+)+)`)
 
 // pruneStaleDirRefs drops shell-history lines that reference any path which
 // no longer exists on disk. Two reasons:

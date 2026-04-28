@@ -78,11 +78,11 @@ func PromoteToRepoRoot(cwd, fileBlock string) (string, bool) {
 	}
 }
 
-// extractAbsolutePaths pulls all whitespace-delimited tokens that
-// look like absolute filesystem paths out of the file collector's
-// rendered block. We don't need a full path parser — the file block
-// is something the harvester wrote, so the format is predictable
-// (one path per line, possibly with a "label:" header line).
+// extractAbsolutePaths pulls absolute filesystem paths out of the file
+// collector's rendered block. The format is predictable (one path per
+// line, possibly with a "label:" header line). filepath.IsAbs handles
+// both Unix (/foo/bar) and Windows (C:\foo\bar) absolute paths so this
+// stays cross-platform.
 func extractAbsolutePaths(block string) []string {
 	var out []string
 	for _, raw := range strings.Split(block, "\n") {
@@ -95,7 +95,7 @@ func extractAbsolutePaths(block string) []string {
 		if strings.HasSuffix(line, ":") {
 			continue
 		}
-		if strings.HasPrefix(line, "/") {
+		if filepath.IsAbs(line) {
 			out = append(out, line)
 		}
 	}

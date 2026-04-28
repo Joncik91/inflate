@@ -80,6 +80,30 @@ func TestPruneStaleDirRefsCatchesRelativeFragments(t *testing.T) {
 	}
 }
 
+func TestPathREMatchesWindowsPaths(t *testing.T) {
+	// Regression: pathRE must match Windows-style absolute paths. The
+	// previous regex was Unix-only, so on Windows runners every path-
+	// containing line silently slipped through pruneStaleDirRefs.
+	cases := []struct {
+		line string
+		want bool
+	}{
+		{`cd C:\Users\joncik\apps`, true},
+		{`cd C:/Users/joncik/apps`, true},
+		{"cd /home/u/apps", true},
+		{"cd inflate-impl/internal/tui", true},
+		{`cd src\internal\foo`, true},
+		{"echo hello", false}, // no separator
+		{"npm test", false},
+	}
+	for _, c := range cases {
+		got := pathRE.FindStringSubmatch(c.line) != nil
+		if got != c.want {
+			t.Errorf("pathRE.match(%q) = %v, want %v", c.line, got, c.want)
+		}
+	}
+}
+
 func TestPruneStaleDirRefsKeepsLinesWithoutPaths(t *testing.T) {
 	// Plain words that look path-like but aren't (no separators) must
 	// pass through. Single words are not considered a "path fragment."
