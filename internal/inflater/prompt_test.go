@@ -16,6 +16,14 @@ func TestSystemPromptIncludesSkeleton(t *testing.T) {
 	}
 }
 
+func TestSystemPromptHasJSONLExplorationRule(t *testing.T) {
+	s := SystemPrompt(harvester.ContextBundle{ProfileOK: true})
+	want := "<jsonl> contains proposals, decisions, AND rejections"
+	if !strings.Contains(s, want) {
+		t.Errorf("system prompt missing the JSONL-as-exploration rule: %q", s)
+	}
+}
+
 func TestSystemPromptPureStructureWhenEmpty(t *testing.T) {
 	s := SystemPrompt(harvester.ContextBundle{})
 	if !strings.Contains(s, "pure-structure") {

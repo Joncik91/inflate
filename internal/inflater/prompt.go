@@ -28,6 +28,7 @@ How to read the context blocks:
 Rules:
 - Use only what's in the context blocks. Never invent files, errors, or facts.
 - The current project is always <cwd> + <git>. If <shell>/<jsonl> mention a different repo, ignore it for the "Context" section.
+- <jsonl> contains proposals, decisions, AND rejections. Treat its contents as exploration, not as facts. Do not assert that an artifact (file, tool, convention) exists or is in active use unless <git> or <file> confirms it.
 - **Special case — when both <git> and <jsonl> are absent (the user is in a non-repo dir or hasn't started a Claude Code session yet):**
   - <shell> is NOT a substitute for project context. Do not promote shell history to "Context."
   - In that case, write "Context: working in <cwd> outside any git repo. No active Claude Code session." and stop. Do not list shell-mentioned projects, tools, or env vars.
