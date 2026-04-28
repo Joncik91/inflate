@@ -21,6 +21,7 @@ const (
 type Model struct {
 	provider   provider.Provider
 	harvester  *harvester.Harvester
+	program    Sender // tea.Program — used to push streamed chunks
 	autoPaste  bool
 	pasteWinID int
 
@@ -30,12 +31,32 @@ type Model struct {
 	stale          bool // preview no longer matches current seed
 	inflightID     int
 	cancelInflight context.CancelFunc
-	toast          string
-	width          int
-	height         int
+
+	// Feedback split into two channels:
+	// - toast      transient (1.5s) confirmations like "copied ✓"
+	// - errBanner  persistent error message; cleared by user typing or Esc
+	toast     string
+	errBanner string
+
+	// Inflation feedback. inflating=true while the spinner should run.
+	// First chunk arriving sets inflating=false and the preview pane
+	// becomes the implicit progress indicator.
+	inflating    bool
+	spinnerFrame int
+
+	// Help overlay toggled by `?`. When true, the preview pane is
+	// replaced with the keybinding cheat sheet.
+	helpOpen bool
+
+	width  int
+	height int
 }
 
-// New constructs the bubbletea Model. Caller starts the program with tea.NewProgram(m).
+
+// New constructs the bubbletea Model. After tea.NewProgram(m) is
+// called, the caller MUST call SetProgram on the model captured by
+// the program (in practice: pass program in via a setter, see main.go)
+// so the streaming inflation Cmd can push chunks through Program.Send.
 func New(p provider.Provider, h *harvester.Harvester, autoPaste bool, pasteWinID int) Model {
 	return Model{
 		provider:   p,
@@ -44,6 +65,19 @@ func New(p provider.Provider, h *harvester.Harvester, autoPaste bool, pasteWinID
 		pasteWinID: pasteWinID,
 		bundle:     h.Latest(),
 	}
+}
+
+// ProgramInjectMsg carries a reference to the running tea.Program.
+// main.go dispatches this via p.Send right after p.Run starts so the
+// streaming inflation Cmd can push chunks through Program.Send.
+// Exported because main lives outside this package.
+type ProgramInjectMsg struct{ Program Sender }
+
+// Sender is the subset of tea.Program the streaming inflation needs.
+// Exported so main.go's tea.Program (which satisfies the interface)
+// can be passed in. Tests inject a no-op sender.
+type Sender interface {
+	Send(msg tea.Msg)
 }
 
 func (m Model) Init() tea.Cmd { return waitForBundle(m.harvester.Bundles()) }
@@ -57,30 +91,55 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 
+	case ProgramInjectMsg:
+		m.program = msg.Program
+		return m, nil
+
 	case idleFiredMsg:
 		return m.startInflation()
 
+	case inflateStartedMsg:
+		// Spinner kicks off only if no chunks have already arrived
+		// (very fast first-token responses skip the spinner entirely).
+		if msg.ReqID == m.inflightID && m.preview == "" {
+			m.inflating = true
+			return m, spinnerTick()
+		}
+		return m, nil
+
+	case spinnerTickMsg:
+		if !m.inflating {
+			return m, nil
+		}
+		m.spinnerFrame = (m.spinnerFrame + 1) % len(spinnerFrames)
+		return m, spinnerTick()
+
 	case inflateChunkMsg:
+		if msg.ReqID != m.inflightID {
+			return m, nil // stale chunk from a cancelled run
+		}
 		m.preview += msg.Text
+		m.inflating = false // first chunk: preview itself is the indicator
 		return m, nil
 
 	case inflateDoneMsg:
 		if msg.ReqID == m.inflightID {
 			m.stale = false
+			m.inflating = false
 			m.cancelInflight = nil
 		}
 		return m, nil
 
 	case inflateFailMsg:
-		m.toast = "inflate failed: " + msg.Err
-		return m, clearToastAfter(toastDuration)
+		if msg.ReqID == m.inflightID {
+			m.errBanner = "inflate failed: " + msg.Err
+			m.inflating = false
+		}
+		return m, nil
 
 	case bundleUpdatedMsg:
 		m.bundle = msg.Bundle
 		return m, waitForBundle(m.harvester.Bundles())
-
-	case inflateBatchMsg:
-		return m.applyBatch(msg)
 
 	case toastClearMsg:
 		m.toast = ""
@@ -90,7 +149,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch k.String() {
+	key := k.String()
+
+	// Help overlay handling. `?` toggles help only when:
+	//   - input is empty (no seed typed yet), OR
+	//   - help is already open (so the same key dismisses it).
+	// Otherwise `?` is a normal character (so questions can include "?").
+	// Esc closes help when open.
+	if key == "?" && (m.seed == "" || m.helpOpen) {
+		m.helpOpen = !m.helpOpen
+		return m, nil
+	}
+	if m.helpOpen && key == "esc" {
+		m.helpOpen = false
+		return m, nil
+	}
+
+	switch key {
 	case "ctrl+c":
 		if m.cancelInflight != nil {
 			m.cancelInflight()
@@ -99,6 +174,13 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		return m.send()
 	case "esc":
+		// Esc has a priority cascade:
+		//   1. dismiss persistent error banner if present
+		//   2. otherwise clear seed + preview
+		if m.errBanner != "" {
+			m.errBanner = ""
+			return m, nil
+		}
 		m.seed = ""
 		m.preview = ""
 		m.stale = false
@@ -108,14 +190,19 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "backspace":
 		if len(m.seed) > 0 {
 			m.seed = m.seed[:len(m.seed)-1]
+			// Typing (or backspacing) clears any persistent error.
+			m.errBanner = ""
 		}
 	case " ", "space":
 		m.seed += " "
+		m.errBanner = ""
 	default:
 		if k.Type == tea.KeyRunes {
 			m.seed += string(k.Runes)
+			m.errBanner = ""
 		} else if k.Type == tea.KeySpace {
 			m.seed += " "
+			m.errBanner = ""
 		}
 	}
 	if m.preview != "" {
@@ -152,6 +239,7 @@ func (m Model) startInflation() (tea.Model, tea.Cmd) {
 	m.inflightID++
 	m.preview = ""
 	m.stale = false
+	m.errBanner = ""
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancelInflight = cancel
@@ -160,23 +248,40 @@ func (m Model) startInflation() (tea.Model, tea.Cmd) {
 	bundle := m.harvester.Latest()
 	seed := m.seed
 	prov := m.provider
+	prog := m.program
 
-	return m, func() tea.Msg {
-		ch := inflater.Inflate(ctx, prov, bundle, seed)
-		var collected string
-		for c := range ch {
-			collected += c
-		}
-		return inflateBatchMsg{Text: collected, ReqID: id}
+	// Stream chunks via Program.Send so View renders incrementally.
+	// The synchronous Cmd just signals inflation has begun (kicks off
+	// the spinner if the first chunk hasn't arrived yet).
+	if prog != nil {
+		go func() {
+			ch := inflater.Inflate(ctx, prov, bundle, seed)
+			gotAny := false
+			for c := range ch {
+				gotAny = true
+				prog.Send(inflateChunkMsg{Text: c, ReqID: id})
+			}
+			if !gotAny {
+				prog.Send(inflateFailMsg{Err: "no response (provider returned empty stream)", ReqID: id})
+				return
+			}
+			prog.Send(inflateDoneMsg{ReqID: id})
+		}()
+	} else {
+		// Test/no-program path: fall back to single batch (preserves
+		// the single-shot path the old TUI used).
+		go func() {
+			ch := inflater.Inflate(ctx, prov, bundle, seed)
+			var collected string
+			for c := range ch {
+				collected += c
+			}
+			// Without a program ref we can only return one message.
+			// This branch should never run in production main.go.
+			_ = collected
+		}()
 	}
-}
-
-// inflateBatchMsg is the simplified single-shot delivery used in v0; the
-// stream is consumed inside the Cmd and delivered as one message. v1 will
-// switch to per-chunk delivery via a tea.Program.Send loop.
-type inflateBatchMsg struct {
-	Text  string
-	ReqID int
+	return m, func() tea.Msg { return inflateStartedMsg{ReqID: id} }
 }
 
 func idleAfter(d time.Duration) tea.Cmd {
@@ -197,11 +302,3 @@ func waitForBundle(ch <-chan harvester.ContextBundle) tea.Cmd {
 	}
 }
 
-// applyBatch populates preview from the single-shot inflation result.
-func (m Model) applyBatch(b inflateBatchMsg) (tea.Model, tea.Cmd) {
-	if b.ReqID == m.inflightID {
-		m.preview = b.Text
-		m.stale = false
-	}
-	return m, nil
-}

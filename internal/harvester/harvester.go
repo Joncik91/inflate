@@ -108,7 +108,7 @@ func (h *Harvester) Run(ctx context.Context) {
 	}
 }
 
-// collectOnce runs all five collectors in parallel and publishes a new bundle.
+// collectOnce runs all six collectors in parallel and publishes a new bundle.
 // Each goroutine writes to its own locals to avoid a data race on the struct.
 func (h *Harvester) collectOnce() {
 	h.collectMu.Lock()
@@ -116,11 +116,11 @@ func (h *Harvester) collectOnce() {
 
 	var wg sync.WaitGroup
 	var (
-		profile, git, shell, file, jsonl            string
-		profileOK, gitOK, shellOK, fileOK, jsonlOK bool
+		profile, git, shell, file, jsonl, procs                    string
+		profileOK, gitOK, shellOK, fileOK, jsonlOK, procsOK         bool
 	)
 
-	wg.Add(5)
+	wg.Add(6)
 	go func() {
 		defer wg.Done()
 		profile = CollectProfile(h.opts.Profile)
@@ -142,20 +142,56 @@ func (h *Harvester) collectOnce() {
 		defer wg.Done()
 		jsonl, jsonlOK = CollectJSONLForSession(h.opts.ProjectDir, h.opts.ClaudeSessionsDir, h.opts.ClaudeProjectsRoot)
 	}()
+	go func() {
+		defer wg.Done()
+		procs, procsOK = CollectProcesses()
+	}()
 	wg.Wait()
 
+	effectiveCwd := h.opts.ProjectDir
+	// Auto-promotion: if git failed at the launch cwd but the file
+	// walker discovered files clustered under one subdirectory that IS
+	// a repo, promote to that subdirectory and re-run git + file. The
+	// user gets full project context even when they launched from a
+	// parent dir like /home/u/apps.
+	if !gitOK && fileOK {
+		if promoted, ok := PromoteToRepoRoot(h.opts.ProjectDir, file); ok {
+			if newGit, newGitOK := CollectGit(promoted); newGitOK {
+				effectiveCwd = promoted
+				git = newGit
+				gitOK = true
+				// Re-run file with the narrower root so paths and
+				// recent-files focus on the actual project.
+				if newFile, newFileOK := CollectFile(promoted); newFileOK {
+					file = newFile
+					fileOK = true
+				}
+			}
+		}
+	}
+
 	bundle := ContextBundle{
-		Cwd:       h.opts.ProjectDir,
-		Profile:   profile,
-		Git:       git,
-		Shell:     shell,
-		File:      file,
-		JSONL:     jsonl,
-		ProfileOK: profileOK,
-		GitOK:     gitOK,
-		ShellOK:   shellOK,
-		FileOK:    fileOK,
-		JSONLOK:   jsonlOK,
+		Cwd:         effectiveCwd,
+		Profile:     profile,
+		Git:         git,
+		Shell:       shell,
+		File:        file,
+		JSONL:       jsonl,
+		Processes:   procs,
+		ProfileOK:   profileOK,
+		GitOK:       gitOK,
+		ShellOK:     shellOK,
+		FileOK:      fileOK,
+		JSONLOK:     jsonlOK,
+		ProcessesOK: procsOK,
+	}
+	// Only scan for neighbor repos when the current cwd itself isn't a
+	// repo. After auto-promotion, gitOK may now be true, so this only
+	// fires when promotion didn't apply.
+	if !gitOK {
+		if repos, err := config.NeighborRepos(h.opts.ProjectDir); err == nil {
+			bundle.NeighborRepos = repos
+		}
 	}
 
 	// scrub each section independently so flag accuracy is preserved

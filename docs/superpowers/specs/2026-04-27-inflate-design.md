@@ -303,7 +303,6 @@ This is the **canonical deferred list**. PR descriptions point here instead of d
 - WSL clipboard interop.
 - Remote Claude Code session (SSH'd into a server).
 - Per-template selection beyond defaults (`debug`, `refactor`, `explain`, `design`, `review`).
-- Per-chunk streaming TUI delivery (collector → bubbletea via `tea.Program.Send` instead of one batched `inflateBatchMsg`).
 
 ### v2 (brand layer)
 
@@ -328,3 +327,9 @@ Items surfaced during implementation. No version commitment; they ship when ther
 - ✅ v0.1.1 — auto-clean stale lockfile via per-OS process-name verification.
 - ✅ v0.1.2 — session-aware JSONL picker (matches the live Claude Code session by `cwd`+`pid`+`status` instead of "newest file in dir").
 - ✅ v0.1.2 — `claude_projects_dir` / `claude_sessions_dir` config knobs.
+- ✅ v0.1.3 — plain-English status legend with severity colors (replaces `profile✓ git✗ shell✓ file✗ jsonl✓`).
+- ✅ v0.1.3 — streaming preview with spinner (per-chunk delivery via `tea.Program.Send`).
+- ✅ v0.1.3 — `?` help overlay listing every keybinding.
+- ✅ v0.1.3 — persistent error banner (errors no longer flash by as 1.5 s toasts).
+- ✅ v0.1.3 — named-section preview rendering (Role · Context · Task · …).
+- ✅ v0.1.3 — prompt-quality fix: skeleton rule that JSONL is exploration not fact, plus dropping recent user prompts from the JSONL summary (closed issue #4).

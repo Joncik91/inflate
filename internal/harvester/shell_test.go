@@ -31,6 +31,94 @@ func TestCollectShellNoFile(t *testing.T) {
 	}
 }
 
+func TestPruneStaleDirRefs(t *testing.T) {
+	live := t.TempDir() // exists
+	dead := filepath.Join(live, "definitely-not-here")
+	lines := []string{
+		"echo hello",                  // no path
+		"cd " + live,                  // live path — keep
+		"cd " + dead,                  // stale path — drop
+		"ls /tmp /var",                // multiple paths, all live
+		"cat " + dead + "/file.txt",   // stale — drop
+		"git status",                  // no path
+	}
+	got := pruneStaleDirRefs(lines)
+	wantKept := []string{
+		"echo hello",
+		"cd " + live,
+		"ls /tmp /var",
+		"git status",
+	}
+	if len(got) != len(wantKept) {
+		t.Fatalf("kept %d lines, want %d:\nkept=%v", len(got), len(wantKept), got)
+	}
+	for i, w := range wantKept {
+		if got[i] != w {
+			t.Errorf("line %d = %q, want %q", i, got[i], w)
+		}
+	}
+}
+
+func TestPruneStaleDirRefsCatchesRelativeFragments(t *testing.T) {
+	// `cd inflate-impl/internal/tui` style — no leading slash. This is
+	// the case absPathRE missed in the first version of pruneStaleDirRefs.
+	lines := []string{
+		"echo hello",
+		"cd inflate-impl/internal/tui", // relative — definitely doesn't exist anywhere
+		"cd internal/tui",              // also stale
+		"git status",
+	}
+	got := pruneStaleDirRefs(lines)
+	wantKept := []string{"echo hello", "git status"}
+	if len(got) != len(wantKept) {
+		t.Fatalf("kept %d lines, want %d:\nkept=%v", len(got), len(wantKept), got)
+	}
+	for i, w := range wantKept {
+		if got[i] != w {
+			t.Errorf("line %d = %q, want %q", i, got[i], w)
+		}
+	}
+}
+
+func TestPathREMatchesWindowsPaths(t *testing.T) {
+	// Regression: pathRE must match Windows-style absolute paths. The
+	// previous regex was Unix-only, so on Windows runners every path-
+	// containing line silently slipped through pruneStaleDirRefs.
+	cases := []struct {
+		line string
+		want bool
+	}{
+		{`cd C:\Users\joncik\apps`, true},
+		{`cd C:/Users/joncik/apps`, true},
+		{"cd /home/u/apps", true},
+		{"cd inflate-impl/internal/tui", true},
+		{`cd src\internal\foo`, true},
+		{"echo hello", false}, // no separator
+		{"npm test", false},
+	}
+	for _, c := range cases {
+		got := pathRE.FindStringSubmatch(c.line) != nil
+		if got != c.want {
+			t.Errorf("pathRE.match(%q) = %v, want %v", c.line, got, c.want)
+		}
+	}
+}
+
+func TestPruneStaleDirRefsKeepsLinesWithoutPaths(t *testing.T) {
+	// Plain words that look path-like but aren't (no separators) must
+	// pass through. Single words are not considered a "path fragment."
+	lines := []string{
+		"deploy",
+		"history",
+		"npm test",
+		"go run main.go", // contains "go run main.go" — main.go exists relative
+	}
+	got := pruneStaleDirRefs(lines)
+	if len(got) < 3 {
+		t.Errorf("expected at least the 3 single-word lines preserved, got: %v", got)
+	}
+}
+
 func TestCollectShellFromFile(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("HOME env var doesn't redirect os.UserHomeDir on Windows; collector behavior is correct (no bash/zsh history) but the test setup can't be exercised")

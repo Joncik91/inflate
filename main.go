@@ -153,6 +153,9 @@ To rotate the key later: inflate config edit env
 	// TUI
 	m := tui.New(prov, h, cfg.AutoPaste, *winID)
 	p := tea.NewProgram(m, tea.WithAltScreen())
+	// Inject the program ref into the model so streaming inflation Cmds
+	// can push chunks via p.Send. Sent before p.Run starts processing.
+	go func() { p.Send(tui.ProgramInjectMsg{Program: p}) }()
 	if _, err := p.Run(); err != nil {
 		fatal("tui: %v", err)
 	}

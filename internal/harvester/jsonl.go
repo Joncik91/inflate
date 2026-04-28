@@ -13,7 +13,6 @@ import (
 
 const (
 	maxEvents     = 200
-	maxUserMsgs   = 3
 	maxAsstMsgs   = 3
 	maxJSONLBytes = 4000 // approximate token cap
 )
@@ -75,10 +74,16 @@ func diagnoseJSONLPath(path string) (string, bool, error) {
 		return "", false, fmt.Errorf("%s has no parseable events", path)
 	}
 
+	// We deliberately drop "recent user prompts" from the summary.
+	// User prompts include rejected proposals, off-topic questions,
+	// and exploratory framing that the LLM tends to flatten into
+	// past-tense facts ("the user is using docs/BACKLOG.md") even
+	// when the proposal was discussed-and-rejected. Assistant replies
+	// are kept because they more often capture decisions and
+	// references that actually grounded.
 	var sb strings.Builder
 	files := map[string]struct{}{}
 	traces := []string{}
-	users := []string{}
 	asst := []string{}
 
 	for _, e := range events {
@@ -92,10 +97,7 @@ func diagnoseJSONLPath(path string) (string, bool, error) {
 		for _, m := range stackTraceRE.FindAllString(text, -1) {
 			traces = append(traces, m)
 		}
-		switch e.Message.Role {
-		case "user":
-			users = append(users, text)
-		case "assistant":
+		if e.Message.Role == "assistant" {
 			asst = append(asst, text)
 		}
 	}
@@ -110,12 +112,6 @@ func diagnoseJSONLPath(path string) (string, bool, error) {
 		fmt.Fprintln(&sb, "errors / stack traces:")
 		for _, t := range traces {
 			fmt.Fprintf(&sb, "  %s\n", t)
-		}
-	}
-	if u := lastN(users, maxUserMsgs); len(u) > 0 {
-		fmt.Fprintln(&sb, "recent user prompts:")
-		for _, m := range u {
-			fmt.Fprintf(&sb, "  - %s\n", truncate(m, 200))
 		}
 	}
 	if a := lastN(asst, maxAsstMsgs); len(a) > 0 {
