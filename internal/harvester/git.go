@@ -31,6 +31,10 @@ func DiagnoseGit(dir string) (string, bool, error) {
 	log, _ := gitOutErr(ctx, dir, "log", "--oneline", "-3")
 	stat, _ := gitOutErr(ctx, dir, "diff", "--stat")
 	mods, _ := gitOutErr(ctx, dir, "diff", "--name-only")
+	staged, _ := gitOutErr(ctx, dir, "diff", "--cached", "--name-only")
+	// `git status --porcelain` surfaces untracked files (which `git diff`
+	// would miss) without flooding the LLM with the full status header.
+	porcelain, _ := gitOutErr(ctx, dir, "status", "--porcelain", "--untracked-files=normal")
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "branch: %s\n", branch)
@@ -40,10 +44,40 @@ func DiagnoseGit(dir string) (string, bool, error) {
 	if stat != "" {
 		fmt.Fprintf(&sb, "diff stat:\n%s\n", stat)
 	}
+	if staged != "" {
+		fmt.Fprintf(&sb, "staged:\n%s\n", staged)
+	}
 	if mods != "" {
-		fmt.Fprintf(&sb, "modified:\n%s", mods)
+		fmt.Fprintf(&sb, "modified:\n%s\n", mods)
+	}
+	if untracked := untrackedOnly(porcelain); untracked != "" {
+		fmt.Fprintf(&sb, "untracked:\n%s\n", untracked)
 	}
 	return sb.String(), true, nil
+}
+
+// untrackedOnly extracts just the untracked file paths from
+// `git status --porcelain` output. Each porcelain line has format:
+//
+//	XY filename
+//
+// where XY is the status code; `??` is the marker for untracked. This
+// keeps the LLM-visible context focused: tracked file changes are already
+// surfaced via `git diff --name-only` / `--stat`.
+func untrackedOnly(porcelain string) string {
+	if porcelain == "" {
+		return ""
+	}
+	var out []string
+	for _, line := range strings.Split(porcelain, "\n") {
+		if strings.HasPrefix(line, "?? ") {
+			out = append(out, strings.TrimPrefix(line, "?? "))
+		}
+	}
+	if len(out) > 10 {
+		out = out[:10]
+	}
+	return strings.Join(out, "\n")
 }
 
 // gitOutErr runs a git subcommand and returns stdout or an error that includes

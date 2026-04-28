@@ -3,7 +3,10 @@ package harvester
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -17,13 +20,36 @@ func CollectFile(dir string) (string, bool) {
 	return out, ok
 }
 
-// DiagnoseFile tries to find files open by a common editor inside dir.
-// Best-effort; ok=false and a non-nil error if lsof is missing, no editor
-// is open, or no matching files are found inside dir.
+// DiagnoseFile tries to find files open by a common editor inside dir,
+// falling back to recently-modified files if no editor is detected.
+// Either signal is useful as <file> context; both fail only when nothing
+// inside dir has been touched recently AND no editor has it open.
 func DiagnoseFile(dir string) (string, bool, error) {
-	if _, err := exec.LookPath("lsof"); err != nil {
-		return "", false, fmt.Errorf("lsof not installed (sudo apt install lsof)")
+	// Path 1: lsof against known editor process names.
+	if _, err := exec.LookPath("lsof"); err == nil {
+		matches, err := lsofMatches(dir)
+		if err == nil && len(matches) > 0 {
+			return strings.Join(matches, "\n"), true, nil
+		}
 	}
+	// Path 2: fallback — recently-modified files inside dir. Captures
+	// the case where the user is editing in a TUI editor (helix, micro)
+	// that doesn't keep the file open via mmap, or where lsof isn't
+	// available (some macOS / minimal containers).
+	recent, err := recentFilesIn(dir, 30*time.Minute, 5)
+	if err != nil {
+		return "", false, err
+	}
+	if len(recent) == 0 {
+		return "", false, fmt.Errorf("no supported editor (%s) currently open AND no recently-modified files inside %s", strings.Join(editors, ", "), dir)
+	}
+	return strings.Join(recent, "\n"), true, nil
+}
+
+// lsofMatches returns paths reported by lsof for any editor process whose
+// path starts with dir. Returns nil + error when lsof itself fails or
+// finds nothing matching.
+func lsofMatches(dir string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
@@ -33,11 +59,10 @@ func DiagnoseFile(dir string) (string, bool, error) {
 	}
 	out, err := exec.CommandContext(ctx, "lsof", args...).Output()
 	if err != nil {
-		// lsof exits 1 when it finds no processes — not really an error.
 		if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 1 {
-			return "", false, fmt.Errorf("no supported editor (%s) currently open", strings.Join(editors, ", "))
+			return nil, fmt.Errorf("no supported editor open")
 		}
-		return "", false, fmt.Errorf("lsof: %w", err)
+		return nil, err
 	}
 	var matches []string
 	for _, line := range strings.Split(string(out), "\n") {
@@ -49,11 +74,63 @@ func DiagnoseFile(dir string) (string, bool, error) {
 			matches = append(matches, path)
 		}
 	}
-	if len(matches) == 0 {
-		return "", false, fmt.Errorf("no matching open files inside %s", dir)
-	}
 	if len(matches) > 5 {
 		matches = matches[:5]
 	}
-	return strings.Join(matches, "\n"), true, nil
+	return matches, nil
+}
+
+// recentFilesIn walks dir (one level deep, then two levels into well-known
+// source subdirs) and returns up to n files modified within window. Skips
+// .git, node_modules, and similar noise. The walk is intentionally bounded
+// — this is harvest-time hot path.
+func recentFilesIn(dir string, window time.Duration, n int) ([]string, error) {
+	cutoff := time.Now().Add(-window)
+	type ent struct {
+		path  string
+		mtime time.Time
+	}
+	var found []ent
+	skipDirs := map[string]bool{
+		".git": true, "node_modules": true, "vendor": true,
+		".idea": true, ".vscode": true, "target": true, "dist": true, "build": true,
+	}
+	maxDepth := 4
+	rootDepth := strings.Count(filepath.Clean(dir), string(os.PathSeparator))
+	walkErr := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		depth := strings.Count(filepath.Clean(path), string(os.PathSeparator)) - rootDepth
+		if depth > maxDepth {
+			return filepath.SkipDir
+		}
+		base := filepath.Base(path)
+		if info.IsDir() {
+			if skipDirs[base] || strings.HasPrefix(base, ".") && depth > 0 {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasPrefix(base, ".") {
+			return nil
+		}
+		if info.ModTime().Before(cutoff) {
+			return nil
+		}
+		found = append(found, ent{path, info.ModTime()})
+		return nil
+	})
+	if walkErr != nil {
+		return nil, walkErr
+	}
+	sort.Slice(found, func(i, j int) bool { return found[i].mtime.After(found[j].mtime) })
+	if len(found) > n {
+		found = found[:n]
+	}
+	out := make([]string, len(found))
+	for i, e := range found {
+		out[i] = e.path
+	}
+	return out, nil
 }

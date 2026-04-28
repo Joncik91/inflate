@@ -23,6 +23,7 @@ How to read the context blocks:
 - <file>: open editor file inside <cwd>. Authoritative.
 - <jsonl>: the active Claude Code session's recent transcript at <cwd>. Useful for what the user just discussed, but it may reference OTHER directories or projects the user navigated through earlier — do NOT infer the current project from it.
 - <shell>: ambient command history from the user's account. NOT scoped to <cwd>. The commands are mostly historical and may reference projects, tools, env vars, and hosts the user is not currently working on. Treat as low-signal background noise.
+- <processes>: dev tools currently running in the user's session right now (e.g. "claude, go, vim"). High signal for "what is the user actively doing" — if cargo is in the list it's likely a Rust project, if pytest then Python, etc.
 - <profile>: who the user is and their style preference.
 
 Rules:
@@ -68,6 +69,9 @@ func UserPrompt(b harvester.ContextBundle, seed string) string {
 	}
 	if b.ShellOK {
 		fmt.Fprintf(&sb, "<shell>\n%s\n</shell>\n", b.Shell)
+	}
+	if b.ProcessesOK {
+		fmt.Fprintf(&sb, "<processes>%s</processes>\n", b.Processes)
 	}
 	fmt.Fprintf(&sb, "<seed>%s</seed>\n", seed)
 	return sb.String()

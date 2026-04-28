@@ -7,20 +7,22 @@ import (
 
 // ContextBundle is the snapshot of harvested context published to the inflater.
 type ContextBundle struct {
-	Cwd     string `json:"cwd,omitempty"`
-	Profile string `json:"profile,omitempty"`
-	Git     string `json:"git,omitempty"`
-	Shell   string `json:"shell,omitempty"`
-	File    string `json:"file,omitempty"`
-	JSONL   string `json:"jsonl,omitempty"`
+	Cwd       string `json:"cwd,omitempty"`
+	Profile   string `json:"profile,omitempty"`
+	Git       string `json:"git,omitempty"`
+	Shell     string `json:"shell,omitempty"`
+	File      string `json:"file,omitempty"`
+	JSONL     string `json:"jsonl,omitempty"`
+	Processes string `json:"processes,omitempty"`
 
 	Redacted int `json:"redacted,omitempty"`
 
-	ProfileOK bool `json:"-"`
-	GitOK     bool `json:"-"`
-	ShellOK   bool `json:"-"`
-	FileOK    bool `json:"-"`
-	JSONLOK   bool `json:"-"`
+	ProfileOK   bool `json:"-"`
+	GitOK       bool `json:"-"`
+	ShellOK     bool `json:"-"`
+	FileOK      bool `json:"-"`
+	JSONLOK     bool `json:"-"`
+	ProcessesOK bool `json:"-"`
 }
 
 // FlagsString renders the per-source flags for the TUI status line.
@@ -51,6 +53,7 @@ var humanLabels = []struct {
 	{"shell", func(b ContextBundle) bool { return b.ShellOK }},
 	{"open editor file", func(b ContextBundle) bool { return b.FileOK }},
 	{"Claude session", func(b ContextBundle) bool { return b.JSONLOK }},
+	{"running tools", func(b ContextBundle) bool { return b.ProcessesOK }},
 }
 
 // PresentSources returns a comma-separated, human-readable list of

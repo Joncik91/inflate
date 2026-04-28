@@ -22,8 +22,8 @@ func TestBundleFlagsString(t *testing.T) {
 }
 
 func TestBundlePresentMissingSources(t *testing.T) {
-	b := ContextBundle{ProfileOK: true, GitOK: true, ShellOK: false, FileOK: true, JSONLOK: false}
-	if got, want := b.PresentSources(), "profile, git, open editor file"; got != want {
+	b := ContextBundle{ProfileOK: true, GitOK: true, ShellOK: false, FileOK: true, JSONLOK: false, ProcessesOK: true}
+	if got, want := b.PresentSources(), "profile, git, open editor file, running tools"; got != want {
 		t.Errorf("PresentSources() = %q, want %q", got, want)
 	}
 	if got, want := b.MissingSources(), "shell, Claude session"; got != want {
@@ -36,7 +36,7 @@ func TestBundlePresentSourcesEmpty(t *testing.T) {
 	if got := b.PresentSources(); got != "" {
 		t.Errorf("PresentSources() = %q, want empty", got)
 	}
-	allMissing := "profile, git, shell, open editor file, Claude session"
+	allMissing := "profile, git, shell, open editor file, Claude session, running tools"
 	if got := b.MissingSources(); got != allMissing {
 		t.Errorf("MissingSources() = %q, want %q", got, allMissing)
 	}

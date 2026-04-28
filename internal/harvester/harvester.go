@@ -108,7 +108,7 @@ func (h *Harvester) Run(ctx context.Context) {
 	}
 }
 
-// collectOnce runs all five collectors in parallel and publishes a new bundle.
+// collectOnce runs all six collectors in parallel and publishes a new bundle.
 // Each goroutine writes to its own locals to avoid a data race on the struct.
 func (h *Harvester) collectOnce() {
 	h.collectMu.Lock()
@@ -116,11 +116,11 @@ func (h *Harvester) collectOnce() {
 
 	var wg sync.WaitGroup
 	var (
-		profile, git, shell, file, jsonl            string
-		profileOK, gitOK, shellOK, fileOK, jsonlOK bool
+		profile, git, shell, file, jsonl, procs                    string
+		profileOK, gitOK, shellOK, fileOK, jsonlOK, procsOK         bool
 	)
 
-	wg.Add(5)
+	wg.Add(6)
 	go func() {
 		defer wg.Done()
 		profile = CollectProfile(h.opts.Profile)
@@ -142,20 +142,26 @@ func (h *Harvester) collectOnce() {
 		defer wg.Done()
 		jsonl, jsonlOK = CollectJSONLForSession(h.opts.ProjectDir, h.opts.ClaudeSessionsDir, h.opts.ClaudeProjectsRoot)
 	}()
+	go func() {
+		defer wg.Done()
+		procs, procsOK = CollectProcesses()
+	}()
 	wg.Wait()
 
 	bundle := ContextBundle{
-		Cwd:       h.opts.ProjectDir,
-		Profile:   profile,
-		Git:       git,
-		Shell:     shell,
-		File:      file,
-		JSONL:     jsonl,
-		ProfileOK: profileOK,
-		GitOK:     gitOK,
-		ShellOK:   shellOK,
-		FileOK:    fileOK,
-		JSONLOK:   jsonlOK,
+		Cwd:         h.opts.ProjectDir,
+		Profile:     profile,
+		Git:         git,
+		Shell:       shell,
+		File:        file,
+		JSONL:       jsonl,
+		Processes:   procs,
+		ProfileOK:   profileOK,
+		GitOK:       gitOK,
+		ShellOK:     shellOK,
+		FileOK:      fileOK,
+		JSONLOK:     jsonlOK,
+		ProcessesOK: procsOK,
 	}
 
 	// scrub each section independently so flag accuracy is preserved
