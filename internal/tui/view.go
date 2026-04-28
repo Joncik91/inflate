@@ -5,9 +5,19 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m Model) View() string {
+	// Compute the inner content width of the rounded preview pane.
+	// Total visible width = m.width. Subtract 2 chars of border + 4 chars
+	// of horizontal padding (Padding(1, 2) = 2 left + 2 right) = 6.
+	// Floor at 20 so very narrow terminals still produce *some* output.
+	contentWidth := m.width - 6
+	if contentWidth < 20 {
+		contentWidth = 20
+	}
+
 	var paneBody string
 	switch {
 	case m.helpOpen:
@@ -19,12 +29,13 @@ func (m Model) View() string {
 			paneBody = "(type a fragment below)"
 		}
 	default:
-		paneBody = renderPreview(m.preview)
+		paneBody = renderPreview(m.preview, contentWidth)
 	}
 
-	previewBlock := previewStyle.Render(paneBody)
+	pane := previewStyle.Width(contentWidth)
+	previewBlock := pane.Render(paneBody)
 	if m.stale && !m.helpOpen {
-		previewBlock = previewDimStyle.Render(paneBody)
+		previewBlock = pane.Faint(true).Render(paneBody)
 	}
 
 	statusLine := renderStatus(m)
@@ -44,17 +55,32 @@ func (m Model) View() string {
 
 // renderPreview prefers the named-section layout when the inflated text
 // follows the Promptism skeleton (Role:/Context:/Task:/Constraints:/Output:).
-// Falls back to glamour when the parse fails.
-func renderPreview(text string) string {
+// Falls back to glamour when the parse fails. width is the inner content
+// width of the surrounding pane; long bodies are word-wrapped to that width
+// and indented under their label so the layout stays readable on narrow
+// and wide terminals.
+func renderPreview(text string, width int) string {
 	if sections := parseSections(text); len(sections) > 0 {
 		var b strings.Builder
+		// Indent body lines under the label by the visible label width
+		// plus the "  ·  " separator. Use lipgloss to wrap; it counts
+		// printable runes correctly even for styled strings.
 		for i, s := range sections {
 			if i > 0 {
 				b.WriteString("\n")
 			}
-			b.WriteString(sectionLabelStyle.Render(s.Label))
-			b.WriteString("  ·  ")
-			b.WriteString(s.Body)
+			label := sectionLabelStyle.Render(s.Label)
+			sep := "  ·  "
+			indent := lipgloss.NewStyle().PaddingLeft(len(s.Label) + len(sep)).Render
+			body := lipgloss.NewStyle().Width(width - len(s.Label) - len(sep)).Render(s.Body)
+			lines := strings.Split(body, "\n")
+			b.WriteString(label)
+			b.WriteString(sep)
+			b.WriteString(lines[0])
+			for _, rest := range lines[1:] {
+				b.WriteString("\n")
+				b.WriteString(indent(rest))
+			}
 		}
 		return b.String()
 	}

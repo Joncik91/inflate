@@ -47,6 +47,21 @@ func TestQuestionMarkTogglesHelp(t *testing.T) {
 	}
 }
 
+func TestQuestionMarkInMidSentenceAppendsToSeed(t *testing.T) {
+	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
+	m := New(stubProvider{}, h, false, 0)
+	m.seed = "what's next"
+
+	model, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	got := model.(Model)
+	if got.helpOpen {
+		t.Errorf("`?` should NOT open help when seed is non-empty (would block ?-in-question)")
+	}
+	if got.seed != "what's next?" {
+		t.Errorf("`?` should append to seed when typing; got seed=%q", got.seed)
+	}
+}
+
 func TestEscDismissesErrorBanner(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
 	m := New(stubProvider{}, h, false, 0)

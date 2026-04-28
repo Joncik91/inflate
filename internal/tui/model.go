@@ -151,8 +151,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := k.String()
 
-	// Help overlay handling — `?` always toggles. Esc closes help if open.
-	if key == "?" {
+	// Help overlay handling. `?` toggles help only when:
+	//   - input is empty (no seed typed yet), OR
+	//   - help is already open (so the same key dismisses it).
+	// Otherwise `?` is a normal character (so questions can include "?").
+	// Esc closes help when open.
+	if key == "?" && (m.seed == "" || m.helpOpen) {
 		m.helpOpen = !m.helpOpen
 		return m, nil
 	}
