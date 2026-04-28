@@ -148,8 +148,30 @@ func (h *Harvester) collectOnce() {
 	}()
 	wg.Wait()
 
+	effectiveCwd := h.opts.ProjectDir
+	// Auto-promotion: if git failed at the launch cwd but the file
+	// walker discovered files clustered under one subdirectory that IS
+	// a repo, promote to that subdirectory and re-run git + file. The
+	// user gets full project context even when they launched from a
+	// parent dir like /home/u/apps.
+	if !gitOK && fileOK {
+		if promoted, ok := PromoteToRepoRoot(h.opts.ProjectDir, file); ok {
+			if newGit, newGitOK := CollectGit(promoted); newGitOK {
+				effectiveCwd = promoted
+				git = newGit
+				gitOK = true
+				// Re-run file with the narrower root so paths and
+				// recent-files focus on the actual project.
+				if newFile, newFileOK := CollectFile(promoted); newFileOK {
+					file = newFile
+					fileOK = true
+				}
+			}
+		}
+	}
+
 	bundle := ContextBundle{
-		Cwd:         h.opts.ProjectDir,
+		Cwd:         effectiveCwd,
 		Profile:     profile,
 		Git:         git,
 		Shell:       shell,
@@ -164,8 +186,8 @@ func (h *Harvester) collectOnce() {
 		ProcessesOK: procsOK,
 	}
 	// Only scan for neighbor repos when the current cwd itself isn't a
-	// repo. Avoids scanning immediate-children when the user is already
-	// inside a working repo (cheap but still pointless work).
+	// repo. After auto-promotion, gitOK may now be true, so this only
+	// fires when promotion didn't apply.
 	if !gitOK {
 		if repos, err := config.NeighborRepos(h.opts.ProjectDir); err == nil {
 			bundle.NeighborRepos = repos
