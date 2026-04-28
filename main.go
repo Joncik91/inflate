@@ -142,6 +142,7 @@ To rotate the key later: inflate config edit env
 	h, err := harvester.New(harvester.Options{
 		ProjectDir:         cwd,
 		ClaudeProjectsRoot: cfg.ClaudeProjectsDir,
+		ClaudeSessionsDir:  cfg.ClaudeSessionsDir,
 		Profile:            profile,
 	})
 	if err != nil {

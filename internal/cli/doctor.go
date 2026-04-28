@@ -132,11 +132,19 @@ func runDoctor(ping bool) string {
 		add(false, "harvester: open editor file (warn-only)", flatErr(fErr))
 	}
 
-	jsonlDir := filepath.Join(claudeRoot, harvester.ProjectDirName(cwd))
-	if _, ok, jErr := harvester.DiagnoseJSONL(jsonlDir); ok {
-		add(true, "harvester: jsonl session", "")
+	sessionsDir := filepath.Join(homeDir(), ".claude", "sessions")
+	if cfgErr == nil && cfg.ClaudeSessionsDir != "" {
+		sessionsDir = cfg.ClaudeSessionsDir
+	}
+	if path, ok, _ := harvester.FindActiveSessionJSONL(cwd, sessionsDir, claudeRoot); ok {
+		add(true, "harvester: active Claude session matched ("+filepath.Base(path)+")", "")
 	} else {
-		add(false, "harvester: jsonl session (warn-only)", flatErr(jErr))
+		jsonlDir := filepath.Join(claudeRoot, harvester.ProjectDirName(cwd))
+		if _, ok, jErr := harvester.DiagnoseJSONL(jsonlDir); ok {
+			add(true, "harvester: jsonl session (newest fallback)", "")
+		} else {
+			add(false, "harvester: jsonl session (warn-only)", flatErr(jErr))
+		}
 	}
 
 	lockPath := filepath.Join(cfgDir, "run.lock")

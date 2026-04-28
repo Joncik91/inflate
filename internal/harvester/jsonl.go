@@ -39,6 +39,22 @@ func CollectJSONL(dir string) (string, bool) {
 	return out, ok
 }
 
+// CollectJSONLForSession is the session-aware variant. It first asks
+// FindActiveSessionJSONL for the JSONL of the live Claude Code session whose
+// cwd matches projectDir; if there is no such session, it falls back to the
+// newest JSONL under projectsRoot/<hash>/. The fallback preserves v0.1.1
+// behavior when Claude Code isn't running but the user still wants context.
+func CollectJSONLForSession(projectDir, sessionsDir, projectsRoot string) (string, bool) {
+	if path, ok, _ := FindActiveSessionJSONL(projectDir, sessionsDir, projectsRoot); ok {
+		out, ok, _ := diagnoseJSONLPath(path)
+		if ok {
+			return out, true
+		}
+	}
+	out, ok, _ := DiagnoseJSONL(filepath.Join(projectsRoot, ProjectDirName(projectDir)))
+	return out, ok
+}
+
 // DiagnoseJSONL tails the most-recently-modified *.jsonl file in dir and
 // returns a compact context block, ok flag, and the underlying error.
 // ok=false with a non-nil error means no JSONL files exist or they are empty.
@@ -47,6 +63,13 @@ func DiagnoseJSONL(dir string) (string, bool, error) {
 	if !ok {
 		return "", false, fmt.Errorf("no *.jsonl files in %s (Claude Code session not started here yet)", dir)
 	}
+	return diagnoseJSONLPath(path)
+}
+
+// diagnoseJSONLPath reads a single JSONL file and renders the same compact
+// context block DiagnoseJSONL produces. Used by CollectJSONLForSession when
+// the active-session picker pinpoints a specific transcript.
+func diagnoseJSONLPath(path string) (string, bool, error) {
 	events := readLastEvents(path, maxEvents)
 	if len(events) == 0 {
 		return "", false, fmt.Errorf("%s has no parseable events", path)
