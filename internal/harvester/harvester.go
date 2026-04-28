@@ -20,6 +20,11 @@ type Options struct {
 	ProjectDir string
 	// ClaudeProjectsRoot defaults to ~/.claude/projects when empty.
 	ClaudeProjectsRoot string
+	// ClaudeSessionsDir defaults to ~/.claude/sessions when empty. Used to
+	// pick the active session whose cwd matches ProjectDir, which avoids
+	// feeding stale unrelated transcripts when multiple sessions exist for
+	// the same project dir.
+	ClaudeSessionsDir string
 	// Profile is the user identity loaded by config.LoadProfile().
 	Profile config.Profile
 }
@@ -40,6 +45,10 @@ func New(opts Options) (*Harvester, error) {
 	if opts.ClaudeProjectsRoot == "" {
 		home, _ := homeDir()
 		opts.ClaudeProjectsRoot = filepath.Join(home, ".claude", "projects")
+	}
+	if opts.ClaudeSessionsDir == "" {
+		home, _ := homeDir()
+		opts.ClaudeSessionsDir = filepath.Join(home, ".claude", "sessions")
 	}
 	h := &Harvester{
 		opts:       opts,
@@ -131,7 +140,7 @@ func (h *Harvester) collectOnce() {
 	}()
 	go func() {
 		defer wg.Done()
-		jsonl, jsonlOK = CollectJSONL(h.sessionDir)
+		jsonl, jsonlOK = CollectJSONLForSession(h.opts.ProjectDir, h.opts.ClaudeSessionsDir, h.opts.ClaudeProjectsRoot)
 	}()
 	wg.Wait()
 

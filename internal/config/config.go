@@ -20,6 +20,13 @@ type Profile struct {
 type Config struct {
 	Provider  ProviderConfig `toml:"provider"`
 	AutoPaste bool           `toml:"auto_paste"`
+	// ClaudeProjectsDir overrides the default ~/.claude/projects path used
+	// to locate Claude Code session JSONL. Empty means default.
+	ClaudeProjectsDir string `toml:"claude_projects_dir"`
+	// ClaudeSessionsDir overrides the default ~/.claude/sessions path used
+	// to find which active session belongs to the current project dir.
+	// Empty means default.
+	ClaudeSessionsDir string `toml:"claude_sessions_dir"`
 }
 
 // ProviderConfig selects and configures the LLM backend.

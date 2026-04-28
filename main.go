@@ -140,8 +140,10 @@ To rotate the key later: inflate config edit env
 
 	// Harvester
 	h, err := harvester.New(harvester.Options{
-		ProjectDir: cwd,
-		Profile:    profile,
+		ProjectDir:         cwd,
+		ClaudeProjectsRoot: cfg.ClaudeProjectsDir,
+		ClaudeSessionsDir:  cfg.ClaudeSessionsDir,
+		Profile:            profile,
 	})
 	if err != nil {
 		fatal("harvester: %v", err)

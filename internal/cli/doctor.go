@@ -91,10 +91,13 @@ func runDoctor(ping bool) string {
 	}
 
 	claudeRoot := filepath.Join(homeDir(), ".claude", "projects")
+	if cfgErr == nil && cfg.ClaudeProjectsDir != "" {
+		claudeRoot = cfg.ClaudeProjectsDir
+	}
 	if dirExists(claudeRoot) {
-		add(true, "~/.claude/projects exists", "")
+		add(true, claudeRoot+" exists", "")
 	} else {
-		add(false, "~/.claude/projects exists (warn-only)", "Claude Code hasn't been launched yet on this machine")
+		add(false, claudeRoot+" exists (warn-only)", "Claude Code hasn't been launched yet on this machine, or claude_projects_dir is wrong")
 	}
 
 	// Harvester collectors — surface underlying errors so the user can fix
@@ -129,11 +132,19 @@ func runDoctor(ping bool) string {
 		add(false, "harvester: open editor file (warn-only)", flatErr(fErr))
 	}
 
-	jsonlDir := filepath.Join(homeDir(), ".claude", "projects", harvester.ProjectDirName(cwd))
-	if _, ok, jErr := harvester.DiagnoseJSONL(jsonlDir); ok {
-		add(true, "harvester: jsonl session", "")
+	sessionsDir := filepath.Join(homeDir(), ".claude", "sessions")
+	if cfgErr == nil && cfg.ClaudeSessionsDir != "" {
+		sessionsDir = cfg.ClaudeSessionsDir
+	}
+	if path, ok, _ := harvester.FindActiveSessionJSONL(cwd, sessionsDir, claudeRoot); ok {
+		add(true, "harvester: active Claude session matched ("+filepath.Base(path)+")", "")
 	} else {
-		add(false, "harvester: jsonl session (warn-only)", flatErr(jErr))
+		jsonlDir := filepath.Join(claudeRoot, harvester.ProjectDirName(cwd))
+		if _, ok, jErr := harvester.DiagnoseJSONL(jsonlDir); ok {
+			add(true, "harvester: jsonl session (newest fallback)", "")
+		} else {
+			add(false, "harvester: jsonl session (warn-only)", flatErr(jErr))
+		}
 	}
 
 	lockPath := filepath.Join(cfgDir, "run.lock")

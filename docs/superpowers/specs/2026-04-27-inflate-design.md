@@ -293,11 +293,38 @@ When all collectors except `profile()` return empty (brand-new dir, no git, no J
 
 ## Out of Scope (deferred)
 
-- **v1:** PTY wrapper (`inflate-claude`) for true watch-as-you-type in Claude Code's input box.
-- **v1:** Local LLM provider (Ollama, llama.cpp).
-- **v1:** Hook-based mode (when/if Anthropic ships prompt-replacement support).
-- **v1:** WSL clipboard interop.
-- **v1:** Remote Claude Code session (SSH'd into a server).
-- **v1:** Per-template selection beyond defaults (`debug`, `refactor`, `explain`, `design`, `review`).
-- **v2:** Daily Liturgy hints, Lexicon of the Silent (Promptism brand-layer features).
-- **v2:** Public leaderboard / rank badge.
+This is the **canonical deferred list**. PR descriptions point here instead of duplicating their own copies; items move out when shipped.
+
+### v1 (architectural)
+
+- PTY wrapper (`inflate-claude`) for true watch-as-you-type in Claude Code's input box.
+- Local LLM provider (Ollama, llama.cpp).
+- Hook-based mode (when/if Anthropic ships prompt-replacement support).
+- WSL clipboard interop.
+- Remote Claude Code session (SSH'd into a server).
+- Per-template selection beyond defaults (`debug`, `refactor`, `explain`, `design`, `review`).
+- Per-chunk streaming TUI delivery (collector → bubbletea via `tea.Program.Send` instead of one batched `inflateBatchMsg`).
+
+### v2 (brand layer)
+
+- Daily Liturgy hints, Lexicon of the Silent (Promptism brand-layer features).
+- Public leaderboard / rank badge.
+
+### Discovered post-spec (untargeted)
+
+Items surfaced during implementation. No version commitment; they ship when there's a real reason.
+
+- OS keychain integration (`libsecret` / macOS keychain / `credman`). v0.1.1 chose `.env` instead — equivalent UX, zero OS-specific code paths.
+- `inflate key set/list/rm` subcommand. `inflate config edit env` covers the same surface.
+- Per-event filtering inside a JSONL by the `cwd` field on each entry. v0.1.2 picks the right *session*; this would refine intra-session if a single session ranges across multiple subdirs.
+- `inflate sessions ls` to list candidate sessions inflate is choosing between. Picker is deterministic, so this is debug-only.
+- Migrate `internal/lockfile` to use `internal/process.Alive` (currently has its own per-OS copy). Cosmetic — both work, no urgency.
+
+### Shipped (moved out)
+
+- ✅ v0.1.1 — interactive first-run wizard (provider + hidden API key prompt → `.env`).
+- ✅ v0.1.1 — `inflate doctor` and `inflate config edit` subcommands.
+- ✅ v0.1.1 — smart `--cwd` (walks to nearest `.git` ancestor).
+- ✅ v0.1.1 — auto-clean stale lockfile via per-OS process-name verification.
+- ✅ v0.1.2 — session-aware JSONL picker (matches the live Claude Code session by `cwd`+`pid`+`status` instead of "newest file in dir").
+- ✅ v0.1.2 — `claude_projects_dir` / `claude_sessions_dir` config knobs.
