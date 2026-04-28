@@ -252,15 +252,17 @@ func renderStatus(m Model) string {
 
 	// Neighbor-repo hint: if we're in a parent dir with N child repos
 	// underneath us, suggest re-launching from one of them so git/file
-	// context is grounded. Cap at 5 names so very crowded parent dirs
-	// don't dominate the status line.
+	// context is grounded. Two-line layout so a long hint doesn't get
+	// clipped on the right side of the terminal.
 	if len(m.bundle.NeighborRepos) > 0 && !m.bundle.GitOK {
 		repos := m.bundle.NeighborRepos
 		if len(repos) > 5 {
 			repos = append(repos[:5:5], "…")
 		}
-		hint := fmt.Sprintf("Hint: %d git repos in subdirs (%s) — relaunch from one of them for full context", len(m.bundle.NeighborRepos), strings.Join(repos, ", "))
-		out = out + "\n" + statusStyleWarn.Render(hint)
+		count := fmt.Sprintf("Hint: %d git repos in subdirs — relaunch from one for full context",
+			len(m.bundle.NeighborRepos))
+		names := "  → " + strings.Join(repos, ", ")
+		out = out + "\n" + statusStyleWarn.Render(count) + "\n" + statusStyleWarn.Render(names)
 	}
 
 	if m.toast != "" {
