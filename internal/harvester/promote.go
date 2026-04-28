@@ -80,9 +80,13 @@ func PromoteToRepoRoot(cwd, fileBlock string) (string, bool) {
 
 // extractAbsolutePaths pulls absolute filesystem paths out of the file
 // collector's rendered block. The format is predictable (one path per
-// line, possibly with a "label:" header line). filepath.IsAbs handles
-// both Unix (/foo/bar) and Windows (C:\foo\bar) absolute paths so this
-// stays cross-platform.
+// line, possibly with a "label:" header line).
+//
+// Cross-platform: accepts both Unix-rooted paths (/foo/bar) AND
+// Windows drive-letter paths (C:\foo or C:/foo). filepath.IsAbs alone
+// is not enough — on Windows, IsAbs("/foo") returns false because
+// /foo is "rooted but drive-relative", not "absolute". We accept both
+// because either flavor is fine for the cluster-prefix logic below.
 func extractAbsolutePaths(block string) []string {
 	var out []string
 	for _, raw := range strings.Split(block, "\n") {
@@ -95,11 +99,26 @@ func extractAbsolutePaths(block string) []string {
 		if strings.HasSuffix(line, ":") {
 			continue
 		}
-		if filepath.IsAbs(line) {
+		if isPathLike(line) {
 			out = append(out, line)
 		}
 	}
 	return out
+}
+
+// isPathLike accepts a line as a path if filepath.IsAbs is happy with
+// it OR if it looks like a Unix absolute path (starts with /). The
+// second clause matters on Windows where /foo/bar reads as "rooted on
+// the current drive," which IsAbs declines to call absolute but our
+// callers treat the same way.
+func isPathLike(line string) bool {
+	if filepath.IsAbs(line) {
+		return true
+	}
+	if strings.HasPrefix(line, "/") {
+		return true
+	}
+	return false
 }
 
 // hasGitEntry returns true if dir contains a .git directory or a
