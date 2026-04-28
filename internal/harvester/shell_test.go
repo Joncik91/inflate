@@ -31,6 +31,34 @@ func TestCollectShellNoFile(t *testing.T) {
 	}
 }
 
+func TestPruneStaleDirRefs(t *testing.T) {
+	live := t.TempDir() // exists
+	dead := filepath.Join(live, "definitely-not-here")
+	lines := []string{
+		"echo hello",                  // no path
+		"cd " + live,                  // live path — keep
+		"cd " + dead,                  // stale path — drop
+		"ls /tmp /var",                // multiple paths, all live
+		"cat " + dead + "/file.txt",   // stale — drop
+		"git status",                  // no path
+	}
+	got := pruneStaleDirRefs(lines)
+	wantKept := []string{
+		"echo hello",
+		"cd " + live,
+		"ls /tmp /var",
+		"git status",
+	}
+	if len(got) != len(wantKept) {
+		t.Fatalf("kept %d lines, want %d:\nkept=%v", len(got), len(wantKept), got)
+	}
+	for i, w := range wantKept {
+		if got[i] != w {
+			t.Errorf("line %d = %q, want %q", i, got[i], w)
+		}
+	}
+}
+
 func TestCollectShellFromFile(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("HOME env var doesn't redirect os.UserHomeDir on Windows; collector behavior is correct (no bash/zsh history) but the test setup can't be exercised")

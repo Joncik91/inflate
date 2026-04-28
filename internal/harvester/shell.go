@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -38,12 +39,47 @@ func DiagnoseShell() (string, bool, error) {
 		}
 		lines := tailLines(f, 20)
 		f.Close()
+		lines = pruneStaleDirRefs(lines)
 		if len(lines) == 0 {
 			continue
 		}
 		return strings.Join(lines, "\n"), true, nil
 	}
 	return "", false, fmt.Errorf("no readable shell history in %v", candidates)
+}
+
+// absPathRE captures absolute Unix paths in shell history. We only inspect
+// the *first* component beyond the root so cheap stat() calls are enough
+// to decide if the line references a directory that no longer exists.
+var absPathRE = regexp.MustCompile(`(?:^|[\s'"])(/(?:[A-Za-z0-9._-]+/?){1,4})`)
+
+// pruneStaleDirRefs drops shell-history lines that reference an absolute
+// path which no longer exists on disk. Two reasons:
+//   - Renamed/deleted project dirs (e.g. `cd /home/u/apps/old-name`) keep
+//     leaking into inflations even after the rename, polluting context.
+//   - The LLM treats them as ground truth despite the skeleton-rule that
+//     <shell> is "low-signal background noise."
+//
+// Conservative: only drops when a stat() proves absence. Lines without
+// absolute paths pass through unchanged.
+func pruneStaleDirRefs(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		matches := absPathRE.FindAllStringSubmatch(line, -1)
+		stale := false
+		for _, m := range matches {
+			path := m[1]
+			path = strings.TrimRight(path, "/")
+			if _, err := os.Stat(path); os.IsNotExist(err) {
+				stale = true
+				break
+			}
+		}
+		if !stale {
+			out = append(out, line)
+		}
+	}
+	return out
 }
 
 func tailLines(f *os.File, n int) []string {

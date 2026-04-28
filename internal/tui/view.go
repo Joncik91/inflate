@@ -62,25 +62,18 @@ func (m Model) View() string {
 func renderPreview(text string, width int) string {
 	if sections := parseSections(text); len(sections) > 0 {
 		var b strings.Builder
-		// Indent body lines under the label by the visible label width
-		// plus the "  ·  " separator. Use lipgloss to wrap; it counts
-		// printable runes correctly even for styled strings.
+		bodyStyle := lipgloss.NewStyle().Width(width)
 		for i, s := range sections {
 			if i > 0 {
-				b.WriteString("\n")
+				b.WriteString("\n\n")
 			}
-			label := sectionLabelStyle.Render(s.Label)
-			sep := "  ·  "
-			indent := lipgloss.NewStyle().PaddingLeft(len(s.Label) + len(sep)).Render
-			body := lipgloss.NewStyle().Width(width - len(s.Label) - len(sep)).Render(s.Body)
-			lines := strings.Split(body, "\n")
-			b.WriteString(label)
-			b.WriteString(sep)
-			b.WriteString(lines[0])
-			for _, rest := range lines[1:] {
-				b.WriteString("\n")
-				b.WriteString(indent(rest))
-			}
+			b.WriteString(sectionLabelStyle.Render(s.Label))
+			b.WriteString("\n")
+			// Body text wraps at full pane width and starts at column
+			// zero on its own line. Hanging-indent under the label
+			// would have to distinguish lipgloss-inserted line breaks
+			// from LLM-emitted ones, which can't be done after rendering.
+			b.WriteString(bodyStyle.Render(s.Body))
 		}
 		return b.String()
 	}
@@ -127,8 +120,11 @@ func parseSections(text string) []promptSection {
 			if t == "" {
 				continue
 			}
+			// Preserve the LLM's line breaks. Lists (Constraints, multi-line
+			// Context) read better with explicit newlines; lipgloss will
+			// wrap each line at the pane width independently.
 			if bodies[current].Len() > 0 {
-				bodies[current].WriteString(" ")
+				bodies[current].WriteString("\n")
 			}
 			bodies[current].WriteString(t)
 		}
