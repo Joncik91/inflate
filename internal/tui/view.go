@@ -70,10 +70,11 @@ func renderPreview(text string, width int) string {
 			b.WriteString(sectionLabelStyle.Render(s.Label))
 			b.WriteString("\n")
 			// Body text wraps at full pane width and starts at column
-			// zero on its own line. Hanging-indent under the label
-			// would have to distinguish lipgloss-inserted line breaks
-			// from LLM-emitted ones, which can't be done after rendering.
-			b.WriteString(bodyStyle.Render(s.Body))
+			// zero on its own line. Soft line-wraps from the LLM
+			// (e.g. when it formatted to ~70 cols itself) get
+			// collapsed first so lipgloss can re-wrap to the actual
+			// pane width without producing awkward sub-sentence breaks.
+			b.WriteString(bodyStyle.Render(reflowBody(s.Body)))
 		}
 		return b.String()
 	}
@@ -82,6 +83,71 @@ func renderPreview(text string, width int) string {
 		return text
 	}
 	return strings.TrimRight(rendered, "\n")
+}
+
+// reflowBody collapses soft line-wraps inside a section body while keeping
+// structural breaks. Heuristic: a single \n joining two non-empty lines
+// where the next line starts with a lowercase letter (or doesn't look
+// like a list marker) is treated as a soft wrap from the LLM and
+// replaced with a space. Anything else (blank lines, "- " bullets,
+// "1. " numbers, mid-line punctuation) stays as-is so deliberate
+// multi-line formatting survives.
+func reflowBody(body string) string {
+	lines := strings.Split(body, "\n")
+	if len(lines) <= 1 {
+		return body
+	}
+	var out strings.Builder
+	for i, line := range lines {
+		if i == 0 {
+			out.WriteString(line)
+			continue
+		}
+		prev := lines[i-1]
+		trimmed := strings.TrimSpace(line)
+		if isStructuralBreak(prev, line, trimmed) {
+			out.WriteString("\n")
+			out.WriteString(line)
+		} else {
+			// Soft wrap — fold into previous line with a space.
+			out.WriteString(" ")
+			out.WriteString(trimmed)
+		}
+	}
+	return out.String()
+}
+
+// isStructuralBreak returns true if the boundary between prev and curr
+// looks intentional (a paragraph break, list item, or numbered item),
+// false if it looks like an LLM soft-wrap to fit ~70 cols.
+func isStructuralBreak(prev, curr, currTrimmed string) bool {
+	// Blank line = paragraph break.
+	if currTrimmed == "" || strings.TrimSpace(prev) == "" {
+		return true
+	}
+	// List markers at the start of curr signal intentional list rendering.
+	if strings.HasPrefix(currTrimmed, "- ") ||
+		strings.HasPrefix(currTrimmed, "* ") ||
+		strings.HasPrefix(currTrimmed, "• ") {
+		return true
+	}
+	// Numbered list: "1. foo", "10) bar".
+	if len(currTrimmed) >= 2 {
+		c0 := currTrimmed[0]
+		if c0 >= '0' && c0 <= '9' {
+			for j := 1; j < len(currTrimmed); j++ {
+				cj := currTrimmed[j]
+				if cj >= '0' && cj <= '9' {
+					continue
+				}
+				if (cj == '.' || cj == ')') && j+1 < len(currTrimmed) && currTrimmed[j+1] == ' ' {
+					return true
+				}
+				break
+			}
+		}
+	}
+	return false
 }
 
 type promptSection struct {

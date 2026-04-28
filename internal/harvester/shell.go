@@ -48,38 +48,60 @@ func DiagnoseShell() (string, bool, error) {
 	return "", false, fmt.Errorf("no readable shell history in %v", candidates)
 }
 
-// absPathRE captures absolute Unix paths in shell history. We only inspect
-// the *first* component beyond the root so cheap stat() calls are enough
-// to decide if the line references a directory that no longer exists.
-var absPathRE = regexp.MustCompile(`(?:^|[\s'"])(/(?:[A-Za-z0-9._-]+/?){1,4})`)
+// pathRE captures both absolute paths (/foo/bar) and relative-style path
+// fragments (foo/bar/baz) in shell history. The latter catches cases like
+// `cd inflate-impl/internal/tui` where the regex for absolute paths would
+// miss the leak. We only consider fragments with at least one separator
+// to avoid matching every plain word.
+var pathRE = regexp.MustCompile(`(?:^|[\s'"])(/?[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+){1,5})`)
 
-// pruneStaleDirRefs drops shell-history lines that reference an absolute
-// path which no longer exists on disk. Two reasons:
-//   - Renamed/deleted project dirs (e.g. `cd /home/u/apps/old-name`) keep
-//     leaking into inflations even after the rename, polluting context.
+// pruneStaleDirRefs drops shell-history lines that reference any path which
+// no longer exists on disk. Two reasons:
+//   - Renamed/deleted project dirs (e.g. `cd /home/u/apps/old-name` or
+//     `cd inflate-impl/internal/tui`) keep leaking into inflations even
+//     after the rename, polluting context.
 //   - The LLM treats them as ground truth despite the skeleton-rule that
 //     <shell> is "low-signal background noise."
 //
+// Resolution for relative-style fragments: try as-is (relative to inflate's
+// cwd), then under $HOME. If neither resolves, the line is dropped.
 // Conservative: only drops when a stat() proves absence. Lines without
-// absolute paths pass through unchanged.
+// any matched path fragment pass through unchanged.
 func pruneStaleDirRefs(lines []string) []string {
+	home, _ := os.UserHomeDir()
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
-		matches := absPathRE.FindAllStringSubmatch(line, -1)
+		matches := pathRE.FindAllStringSubmatch(line, -1)
 		stale := false
 		for _, m := range matches {
-			path := m[1]
-			path = strings.TrimRight(path, "/")
-			if _, err := os.Stat(path); os.IsNotExist(err) {
-				stale = true
-				break
+			frag := strings.TrimRight(m[1], "/")
+			if frag == "" {
+				continue
 			}
+			if pathExists(frag) {
+				continue
+			}
+			// Relative fragment: try resolving under $HOME before
+			// declaring it stale, so common patterns like
+			// `cd Documents/foo` work when run from $HOME.
+			if !filepath.IsAbs(frag) && home != "" {
+				if pathExists(filepath.Join(home, frag)) {
+					continue
+				}
+			}
+			stale = true
+			break
 		}
 		if !stale {
 			out = append(out, line)
 		}
 	}
 	return out
+}
+
+func pathExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
 
 func tailLines(f *os.File, n int) []string {

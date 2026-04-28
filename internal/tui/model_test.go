@@ -121,6 +121,43 @@ func TestParseSectionsRejectsFreeformPreamble(t *testing.T) {
 	}
 }
 
+func TestReflowBodyCollapsesSoftWraps(t *testing.T) {
+	in := "An active Claude Code session is\nopen, recently discussing inflate\nusage metrics."
+	got := reflowBody(in)
+	want := "An active Claude Code session is open, recently discussing inflate usage metrics."
+	if got != want {
+		t.Errorf("reflowBody collapsed wrong\ngot:  %q\nwant: %q", got, want)
+	}
+}
+
+func TestReflowBodyPreservesParagraphs(t *testing.T) {
+	in := "First paragraph here.\n\nSecond paragraph here."
+	got := reflowBody(in)
+	if !strings.Contains(got, "\n\n") {
+		t.Errorf("paragraph break should survive: %q", got)
+	}
+}
+
+func TestReflowBodyPreservesBullets(t *testing.T) {
+	in := "Constraints summary:\n- be concise\n- prefer code over prose\n- match style"
+	got := reflowBody(in)
+	for _, want := range []string{"\n- be concise", "\n- prefer code", "\n- match style"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("bullet break lost: missing %q in %q", want, got)
+		}
+	}
+}
+
+func TestReflowBodyPreservesNumberedList(t *testing.T) {
+	in := "Steps:\n1. one\n2. two\n3. three"
+	got := reflowBody(in)
+	for _, want := range []string{"\n1. one", "\n2. two", "\n3. three"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("numbered break lost: missing %q in %q", want, got)
+		}
+	}
+}
+
 func TestParseSectionsRejectsRandomText(t *testing.T) {
 	in := "just some explanatory text without any labels"
 	if got := parseSections(in); got != nil {
