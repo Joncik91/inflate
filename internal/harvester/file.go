@@ -24,18 +24,20 @@ func CollectFile(dir string) (string, bool) {
 // falling back to recently-modified files if no editor is detected.
 // Either signal is useful as <file> context; both fail only when nothing
 // inside dir has been touched recently AND no editor has it open.
+//
+// Labels the output so the LLM can distinguish "open right now" (lsof
+// match) from "edited in the last 30 min" (mtime fallback). The two
+// signals are different: an open file is what the user is *currently*
+// looking at; a recently-modified file is what they touched recently.
 func DiagnoseFile(dir string) (string, bool, error) {
 	// Path 1: lsof against known editor process names.
 	if _, err := exec.LookPath("lsof"); err == nil {
 		matches, err := lsofMatches(dir)
 		if err == nil && len(matches) > 0 {
-			return strings.Join(matches, "\n"), true, nil
+			return "open in editor:\n" + strings.Join(matches, "\n"), true, nil
 		}
 	}
-	// Path 2: fallback — recently-modified files inside dir. Captures
-	// the case where the user is editing in a TUI editor (helix, micro)
-	// that doesn't keep the file open via mmap, or where lsof isn't
-	// available (some macOS / minimal containers).
+	// Path 2: fallback — recently-modified files. Distinct label.
 	recent, err := recentFilesIn(dir, 30*time.Minute, 5)
 	if err != nil {
 		return "", false, err
@@ -43,7 +45,7 @@ func DiagnoseFile(dir string) (string, bool, error) {
 	if len(recent) == 0 {
 		return "", false, fmt.Errorf("no supported editor (%s) currently open AND no recently-modified files inside %s", strings.Join(editors, ", "), dir)
 	}
-	return strings.Join(recent, "\n"), true, nil
+	return "recently modified (no editor detected):\n" + strings.Join(recent, "\n"), true, nil
 }
 
 // lsofMatches returns paths reported by lsof for any editor process whose

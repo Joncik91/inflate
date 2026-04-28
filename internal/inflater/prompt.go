@@ -30,6 +30,7 @@ Rules:
 - Use only what's in the context blocks. Never invent files, errors, or facts.
 - The current project is always <cwd> + <git>. If <shell>/<jsonl> mention a different repo, ignore it for the "Context" section.
 - The presence of a <jsonl> block IS a fact: it means a Claude Code session is currently active in this directory. The CONTENTS of <jsonl> (recent assistant replies, file references) are exploration, not authoritative — proposals discussed there may have been rejected. So: feel free to mention "an active Claude Code session is open" when <jsonl> is present, but do not assert that any specific artifact mentioned inside it exists or is in use unless <git> or <file> confirms it.
+- File-name corollary: a filename appearing ONLY inside <jsonl> is NOT a real file. Do not cite it in Constraints, Output, or Context as if it exists ("items in BACKLOG.md", "the FOO.md spec"). If you need to reference a file, the path must appear in <git> or <file>. If neither has it, drop the reference entirely or phrase it as "the file the user mentioned earlier (if any)".
 - **Special case — when <jsonl> is absent (no active Claude Code session for this directory):**
   - If <git> is also absent, the user is in a non-repo dir without a session: write "Context: working in <cwd> outside any git repo. No active Claude Code session." and stop. Do not promote shell history to "Context."
   - If <git> IS present (repo exists, just no active Claude Code chat): use git+file as the Context source as normal.

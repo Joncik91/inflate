@@ -3,6 +3,7 @@ package harvester
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -22,7 +23,9 @@ func TestDiagnoseFileNoLSOFNoRecent(t *testing.T) {
 
 func TestDiagnoseFileFallsBackToRecent(t *testing.T) {
 	// lsof unavailable, but a recently-modified file exists in dir.
-	// Fallback should kick in and return that file.
+	// Fallback should kick in and return that file with the
+	// "recently modified" label so the LLM doesn't conflate
+	// recent-mtime with "the user has this open right now."
 	t.Setenv("PATH", "")
 	dir := t.TempDir()
 	target := filepath.Join(dir, "recent.go")
@@ -33,8 +36,8 @@ func TestDiagnoseFileFallsBackToRecent(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ok=true when recent file exists, err=%v", err)
 	}
-	if got == "" {
-		t.Errorf("expected the recent file path, got empty")
+	if !strings.Contains(got, "recently modified") {
+		t.Errorf("fallback path must label output as 'recently modified': %q", got)
 	}
 }
 

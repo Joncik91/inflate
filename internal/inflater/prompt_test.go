@@ -18,11 +18,13 @@ func TestSystemPromptIncludesSkeleton(t *testing.T) {
 
 func TestSystemPromptHasJSONLExplorationRule(t *testing.T) {
 	s := SystemPrompt(harvester.ContextBundle{ProfileOK: true})
-	// Two-part rule: presence of jsonl is a fact (session is active),
-	// but its contents are exploration not authoritative.
+	// Three-part rule: presence of jsonl is a fact (session is active),
+	// contents are exploration not authoritative, AND a filename appearing
+	// only inside jsonl must not be cited as if it exists.
 	wants := []string{
 		"presence of a <jsonl> block IS a fact",
 		"are exploration, not authoritative",
+		"a filename appearing ONLY inside <jsonl> is NOT a real file",
 	}
 	for _, w := range wants {
 		if !strings.Contains(s, w) {
