@@ -9,14 +9,18 @@ import (
 )
 
 func (m Model) View() string {
-	// Compute the inner content width of the rounded preview pane.
-	// Total visible width = m.width. Subtract 2 chars of border + 4 chars
-	// of horizontal padding (Padding(1, 2) = 2 left + 2 right) = 6.
-	// Floor at 20 so very narrow terminals still produce *some* output.
-	contentWidth := m.width - 6
-	if contentWidth < 20 {
-		contentWidth = 20
+	// Lipgloss border-width handling: Width() on a style with Padding
+	// represents the inner area + padding (NOT counting border). So the
+	// total rendered width is Width + 2 (one column per side for the
+	// border). To make the rounded box fit inside the terminal we set
+	// paneWidth = m.width - 2. The contentWidth available for body
+	// word-wrap is paneWidth - 4 (horizontal padding 2 left + 2 right).
+	// Floor at 24 so very narrow terminals still produce *some* output.
+	paneWidth := m.width - 2
+	if paneWidth < 24 {
+		paneWidth = 24
 	}
+	contentWidth := paneWidth - 4
 
 	var paneBody string
 	switch {
@@ -32,7 +36,7 @@ func (m Model) View() string {
 		paneBody = renderPreview(m.preview, contentWidth)
 	}
 
-	pane := previewStyle.Width(contentWidth)
+	pane := previewStyle.Width(paneWidth)
 	previewBlock := pane.Render(paneBody)
 	if m.stale && !m.helpOpen {
 		previewBlock = pane.Faint(true).Render(paneBody)
