@@ -72,7 +72,7 @@ func (m Model) toggleProvider() (tea.Model, tea.Cmd) {
 		m.toast = "Ollama not detected on localhost:11434"
 		return m, clearToastAfter(toastDuration)
 	}
-	picked := models[0].Name
+	picked := pickSmallestModel(models)
 
 	// Build the Ollama provider and verify the daemon really answers
 	// `/api/tags` before swapping (probe was best-effort).
@@ -106,10 +106,55 @@ func (m Model) toggleProvider() (tea.Model, tea.Cmd) {
 
 	suffix := ""
 	if len(models) > 1 {
-		suffix = fmt.Sprintf(" (1 of %d, use `inflate config provider` to pick others)", len(models))
+		suffix = fmt.Sprintf(" (smallest of %d, use `inflate config provider` to pick others)", len(models))
 	}
-	m.toast = "switched to " + ollama.Name() + " ✓" + suffix
+	m.toast = "switched to " + ollama.Name() + " ✓ — first inflate may take 30-60s to load model" + suffix
 	return m, clearToastAfter(toastDuration)
+}
+
+// pickSmallestModel returns the chat-capable model with the smallest
+// parameter count. Smaller models load faster (less VRAM transfer) and
+// generate faster, which matters a lot on iGPUs. Falls back to the first
+// model when sizes are unparseable.
+func pickSmallestModel(models []intake.OllamaModel) string {
+	if len(models) == 0 {
+		return ""
+	}
+	best := 0
+	bestSize := parseParamSize(models[0].ParameterSize)
+	for i := 1; i < len(models); i++ {
+		s := parseParamSize(models[i].ParameterSize)
+		if s > 0 && (bestSize == 0 || s < bestSize) {
+			best = i
+			bestSize = s
+		}
+	}
+	return models[best].Name
+}
+
+// parseParamSize converts an Ollama parameter_size string ("26B", "36.0B",
+// "137M", "7B") into millions of params. Returns 0 if the string is empty
+// or unparseable.
+func parseParamSize(s string) int {
+	if s == "" {
+		return 0
+	}
+	mult := 1
+	suffix := s[len(s)-1]
+	num := s[:len(s)-1]
+	switch suffix {
+	case 'B', 'b':
+		mult = 1000
+	case 'M', 'm':
+		mult = 1
+	default:
+		num = s // no suffix; assume raw millions
+	}
+	var f float64
+	if _, err := fmt.Sscanf(num, "%f", &f); err != nil {
+		return 0
+	}
+	return int(f * float64(mult))
 }
 
 // reachableOllama is a thin wrapper around the probe that also confirms

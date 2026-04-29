@@ -172,3 +172,40 @@ func TestReachableOllamaIsExported(t *testing.T) {
 		t.Error("expected unreachable to return false")
 	}
 }
+
+func TestPickSmallestModel(t *testing.T) {
+	got := pickSmallestModel([]intake.OllamaModel{
+		{Name: "qwen3.6:35b", ParameterSize: "36.0B"},
+		{Name: "gemma4:26b", ParameterSize: "25.8B"},
+		{Name: "llama3:8b", ParameterSize: "7B"},
+	})
+	if got != "llama3:8b" {
+		t.Errorf("smallest = %q, want llama3:8b", got)
+	}
+}
+
+func TestPickSmallestModelHandlesMissingSizes(t *testing.T) {
+	got := pickSmallestModel([]intake.OllamaModel{
+		{Name: "fallback:latest", ParameterSize: ""},
+		{Name: "real:7b", ParameterSize: "7B"},
+	})
+	if got != "real:7b" {
+		t.Errorf("should prefer model with parseable size, got %q", got)
+	}
+}
+
+func TestParseParamSize(t *testing.T) {
+	cases := map[string]int{
+		"7B":    7000,
+		"36.0B": 36000,
+		"26B":   26000,
+		"137M":  137,
+		"":      0,
+		"junk":  0,
+	}
+	for in, want := range cases {
+		if got := parseParamSize(in); got != want {
+			t.Errorf("parseParamSize(%q) = %d, want %d", in, got, want)
+		}
+	}
+}
