@@ -6,6 +6,8 @@ const helpText = `Keys
   Tab          inflate now (skip the 600 ms idle wait)
   Esc          dismiss errors, then clear input + preview
   ?            toggle this help
+  p            (in this overlay) cycle providers — your configured one,
+               then each local Ollama model in turn
   Ctrl-C       quit
 
 What inflate does

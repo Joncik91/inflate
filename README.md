@@ -47,6 +47,7 @@ Inflate reads your project state in parallel — git diff, shell history, files 
 | `inflate config` | Edit `config.toml` in `$EDITOR` |
 | `inflate config profile` | Edit `profile.toml` |
 | `inflate config env` | Edit `.env` (rotate keys, add a second provider) |
+| `inflate config provider` | Re-run the provider wizard (switch DeepSeek ↔ Ollama, rotate keys, etc.) |
 
 | Key | Action |
 |---|---|
@@ -54,6 +55,7 @@ Inflate reads your project state in parallel — git diff, shell history, files 
 | Tab | force inflate now (skip the 600 ms idle wait) |
 | Esc | dismiss errors, then clear input + preview |
 | `?` | toggle help overlay |
+| `p` (in help) | switch between cloud provider and local Ollama |
 | Ctrl-C | quit |
 
 The TUI streams the inflated prompt in as it arrives. While waiting for the first token a `⠹ Inflating…` spinner shows below the preview. Errors sit in a red banner until you type or press Esc — they don't flash by.
@@ -98,6 +100,17 @@ model       = "gemini-2.0-flash"
 api_key_env = "GOOGLE_API_KEY"
 ```
 
+**Local Ollama:**
+
+```toml
+[provider]
+kind     = "ollama"
+model    = "gemma4:26b"
+base_url = "http://localhost:11434"  # default — omit for local
+```
+
+No API key required. Inflate verifies the model is pulled at startup and points you at `ollama pull <model>` if it's missing. The first-run wizard auto-detects a running Ollama and offers it as the first option, listing installed chat-capable models with their parameter sizes.
+
 ## Troubleshooting
 
 ```bash
@@ -108,9 +121,9 @@ Lists every startup check with `[✓]` / `[✗]`. Most "inflate keeps asking for
 
 ## Status
 
-v0.1.3 — streaming preview, `?` help overlay, persistent error banner, named-section rendering, deeper context (untracked files, dev-tools detection, recent-files fallback, neighbor-repo hints, auto-promotion to repo root), downstream-assistant prompt framing.
+v0.1.4 — native Ollama provider (auto-detect in wizard, model-pull check at startup, no API key required, parameter-size hints in setup menu).
 
-Built on v0.1.2 (session-aware JSONL picker), v0.1.1 (interactive setup, dotenv-backed keys, smart `--cwd`, lockfile self-cleanup, `doctor` + `config edit` subcommands), and v0 (TUI, BYOK, harvester, Promptism prompt skeleton).
+Built on v0.1.3 (streaming preview, `?` help, persistent error banner, named-section rendering, deeper context, downstream-assistant prompt framing), v0.1.2 (session-aware JSONL picker), v0.1.1 (interactive setup, dotenv-backed keys, smart `--cwd`, lockfile self-cleanup, `doctor` + `config edit` subcommands), and v0 (TUI, BYOK, harvester, Promptism prompt skeleton).
 
 PTY wrapper for watch-as-you-type still deferred.
 

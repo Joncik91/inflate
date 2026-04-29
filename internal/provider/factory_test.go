@@ -47,3 +47,22 @@ func TestNewFromConfigUnknownKind(t *testing.T) {
 		t.Error("expected error for unknown provider kind")
 	}
 }
+
+func TestNewFromConfigOllamaNoKey(t *testing.T) {
+	// Ollama is local and doesn't need an API key — the factory must skip
+	// the empty-key check for kind=ollama.
+	cfg := config.Config{
+		Provider: config.ProviderConfig{
+			Kind:    "ollama",
+			Model:   "gemma4:26b",
+			BaseURL: "http://localhost:11434",
+		},
+	}
+	p, err := NewFromConfig(cfg)
+	if err != nil {
+		t.Fatalf("Ollama config without key should succeed, got: %v", err)
+	}
+	if p.Name() != "ollama:gemma4:26b" {
+		t.Errorf("Name = %q, want ollama:gemma4:26b", p.Name())
+	}
+}

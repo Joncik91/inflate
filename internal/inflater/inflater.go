@@ -10,7 +10,12 @@ import (
 
 const (
 	maxOutputTokens = 800
-	totalDeadline   = 30 * time.Second
+	// totalDeadline is generous on purpose. Cloud providers usually finish
+	// in 3-10s, so this only matters for local Ollama models. A 36B MoE on
+	// integrated GPU runs at ~17 tok/s — 800 output tokens takes ~47s, and
+	// a longer Promptism expansion can hit ~90s. Anything that runs longer
+	// than 3 minutes is genuinely hung and worth cancelling.
+	totalDeadline = 180 * time.Second
 )
 
 // Inflate calls the provider with the system + user prompts assembled from

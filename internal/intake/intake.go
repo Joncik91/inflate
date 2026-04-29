@@ -42,13 +42,60 @@ func RunFromReader(r io.Reader, w io.Writer) (config.Profile, error) {
 func RunFullSetup(r io.Reader, w io.Writer, keys KeyReader) (SetupResult, error) {
 	scanner := bufio.NewScanner(r)
 	prof := runProfile(scanner, w)
+	prov, keyName, keyVal, err := runProvider(scanner, w, keys)
+	if err != nil {
+		return SetupResult{}, err
+	}
+	return SetupResult{
+		Profile:     prof,
+		Provider:    prov,
+		APIKeyName:  keyName,
+		APIKeyValue: keyVal,
+	}, nil
+}
 
-	provChoice := strings.ToLower(askWithScanner(scanner, w,
-		"Which LLM provider? [a]nthropic / [d]eepseek / [o]penai / [g]oogle / [c]ustom (openai-compat URL)"))
+// RunProviderOnly runs ONLY the provider+key step of the wizard. Used by
+// `inflate config provider` to switch backends after first-run is past.
+// Returns the new provider config plus key info (empty for keyless kinds).
+func RunProviderOnly(r io.Reader, w io.Writer, keys KeyReader) (config.ProviderConfig, string, string, error) {
+	scanner := bufio.NewScanner(r)
+	return runProvider(scanner, w, keys)
+}
+
+// runProvider is the shared provider-selection step. Picks a kind, resolves
+// model + base URL, prompts for the API key (skipped for keyless providers
+// like Ollama), and returns the populated ProviderConfig.
+func runProvider(scanner *bufio.Scanner, w io.Writer, keys KeyReader) (config.ProviderConfig, string, string, error) {
+	// Probe for a local Ollama before printing the menu. If found, give it
+	// top billing — local-first beats cloud-by-default for new users.
+	ollamaModels, ollamaOK := probeOllama("")
+
+	menu := "Which LLM provider? "
+	if ollamaOK {
+		menu += fmt.Sprintf("[l]ocal Ollama (%d models found) / ", len(ollamaModels))
+	}
+	menu += "[a]nthropic / [d]eepseek / [o]penai / [g]oogle / [c]ustom (openai-compat URL)"
+	provChoice := strings.ToLower(askWithScanner(scanner, w, menu))
 
 	prov := config.ProviderConfig{}
 	keyName := ""
 	switch provChoice {
+	case "l", "ollama", "local":
+		if !ollamaOK {
+			return config.ProviderConfig{}, "", "", fmt.Errorf("Ollama wasn't detected on http://localhost:11434 — start it with `ollama serve` and re-run")
+		}
+		fmt.Fprintln(w, "Available models:")
+		for i, m := range ollamaModels {
+			fmt.Fprintf(w, "  %d. %s (%s %s)\n", i+1, m.Name, m.ParameterSize, m.Quantization)
+		}
+		pick := askWithScanner(scanner, w, "Pick a model (1-N or full name)")
+		picked, err := resolveOllamaPick(pick, ollamaModels)
+		if err != nil {
+			return config.ProviderConfig{}, "", "", err
+		}
+		prov.Kind = "ollama"
+		prov.Model = picked
+		// keyName stays empty — Ollama needs no API key.
 	case "a", "anthropic":
 		prov.Kind = "anthropic"
 		prov.Model = askWithScanner(scanner, w, "Model? (e.g. claude-haiku-4-5, claude-sonnet-4-6, claude-opus-4-7)")
@@ -73,22 +120,43 @@ func RunFullSetup(r io.Reader, w io.Writer, keys KeyReader) (SetupResult, error)
 		prov.Model = askWithScanner(scanner, w, "Model name?")
 		keyName = askWithScanner(scanner, w, "Env var name for the key? (e.g. MY_LOCAL_KEY)")
 	default:
-		return SetupResult{}, fmt.Errorf("unknown provider choice %q", provChoice)
+		return config.ProviderConfig{}, "", "", fmt.Errorf("unknown provider choice %q", provChoice)
+	}
+
+	if keyName == "" {
+		// No-key provider (Ollama). Skip the prompt entirely.
+		return prov, "", "", nil
 	}
 	prov.APIKeyEnv = keyName
 
 	keyVal, err := keys.ReadKey(fmt.Sprintf("Paste your %s (input hidden)", keyName))
 	if err != nil {
-		return SetupResult{}, err
+		return config.ProviderConfig{}, "", "", err
 	}
 	keyVal = strings.TrimSpace(keyVal)
+	return prov, keyName, keyVal, nil
+}
 
-	return SetupResult{
-		Profile:     prof,
-		Provider:    prov,
-		APIKeyName:  keyName,
-		APIKeyValue: keyVal,
-	}, nil
+// resolveOllamaPick accepts either a 1-based index or a model name and
+// returns the canonical model name. Whitespace tolerated.
+func resolveOllamaPick(input string, models []OllamaModel) (string, error) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return "", fmt.Errorf("no model picked")
+	}
+	// Numeric pick?
+	for i, m := range models {
+		if input == fmt.Sprintf("%d", i+1) {
+			return m.Name, nil
+		}
+	}
+	// Exact name match?
+	for _, m := range models {
+		if input == m.Name {
+			return m.Name, nil
+		}
+	}
+	return "", fmt.Errorf("pick %q matched neither a number nor a model name", input)
 }
 
 // TerminalKeyReader reads from the terminal with echo disabled. Real-run path.

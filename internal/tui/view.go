@@ -170,10 +170,19 @@ func parseSections(text string) []promptSection {
 	var bodies []strings.Builder
 	for _, line := range strings.Split(text, "\n") {
 		matched := false
+		// Strip leading markdown decoration that smaller local models
+		// sometimes emit around section labels: "**Output:**", "## Output:",
+		// "- **Output**:". Normalize before prefix-matching.
+		stripped := strings.TrimSpace(line)
+		stripped = strings.TrimLeft(stripped, "*#-> ")
+		stripped = strings.TrimSpace(stripped)
 		for _, label := range known {
 			prefix := label + ":"
-			if strings.HasPrefix(strings.TrimSpace(line), prefix) {
-				body := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), prefix))
+			altPrefix := label + "**:" // matches "**Output**:" → "Output**:"
+			if strings.HasPrefix(stripped, prefix) || strings.HasPrefix(stripped, altPrefix) {
+				rest := strings.TrimPrefix(stripped, label)
+				rest = strings.TrimLeft(rest, "*: ")
+				body := strings.TrimRight(rest, "* ")
 				sections = append(sections, promptSection{Label: label})
 				bodies = append(bodies, strings.Builder{})
 				bodies[len(bodies)-1].WriteString(body)
@@ -207,10 +216,13 @@ func parseSections(text string) []promptSection {
 	}
 	// Reject parse if the *first* line of the input wasn't a recognized
 	// section label — this catches cases where the LLM wrote a preamble.
+	// Strip the same markdown decoration we accept in body matching.
 	firstLine := strings.TrimSpace(strings.SplitN(text, "\n", 2)[0])
+	firstLine = strings.TrimLeft(firstLine, "*#-> ")
+	firstLine = strings.TrimSpace(firstLine)
 	firstOK := false
 	for _, label := range known {
-		if strings.HasPrefix(firstLine, label+":") {
+		if strings.HasPrefix(firstLine, label+":") || strings.HasPrefix(firstLine, label+"**:") {
 			firstOK = true
 			break
 		}

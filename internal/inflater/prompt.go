@@ -40,7 +40,8 @@ Rules:
   - Treat the seed as a generic question if neither <git> nor <jsonl> is present; ask the user for clarifying details if the task isn't a generic shell/admin query.
 - If a section can't be filled from context, write "ask for X if not provided".
 - Match the user's style preference from <profile>.
-- Return ONLY the inflated prompt. No preamble, no explanation, no markdown fences.`
+- Return ONLY the inflated prompt. No preamble, no explanation, no markdown fences.
+- Emit ALL FIVE section labels (Role:, Context:, Task:, Constraints:, Output:) on their own lines, in order, with no markdown bold or other decoration around the label. The Output section is REQUIRED — do not stop after Constraints. Smaller local models tend to skip Output; this is the most common failure and you must guard against it.`
 
 // SystemPrompt returns the system message for the inflater LLM call.
 // When the bundle has no usable context (everything ✗), the system prompt

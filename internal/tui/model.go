@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/Joncik91/inflate/internal/config"
 	"github.com/Joncik91/inflate/internal/harvester"
 	"github.com/Joncik91/inflate/internal/inflater"
 	"github.com/Joncik91/inflate/internal/output"
@@ -24,6 +25,17 @@ type Model struct {
 	program    Sender // tea.Program — used to push streamed chunks
 	autoPaste  bool
 	pasteWinID int
+
+	// cfg is the loaded config snapshot; mutated when the user cycles
+	// providers via `p` so the change persists to disk and across launches.
+	cfg config.Config
+	// originalProvider + originalProviderCfg snapshot what was in
+	// config.toml when inflate booted. They anchor the `p`-key cycle so
+	// users can always get back to (e.g.) DeepSeek even after multiple
+	// switches. If inflate booted with Ollama configured, this captures
+	// that — and the cycle just rotates through Ollama models.
+	originalProvider    provider.Provider
+	originalProviderCfg config.ProviderConfig
 
 	seed           string
 	preview        string
@@ -48,6 +60,13 @@ type Model struct {
 	// replaced with the keybinding cheat sheet.
 	helpOpen bool
 
+	// idleGen is bumped on every seed-mutating keypress. The pending
+	// idleAfter timer carries the generation it was scheduled with; we
+	// only honor a fired timer if its Gen matches m.idleGen (the latest).
+	// This makes idleAfter effectively a debounced single-fire — older
+	// timers are ignored when they expire.
+	idleGen int
+
 	width  int
 	height int
 }
@@ -57,13 +76,16 @@ type Model struct {
 // called, the caller MUST call SetProgram on the model captured by
 // the program (in practice: pass program in via a setter, see main.go)
 // so the streaming inflation Cmd can push chunks through Program.Send.
-func New(p provider.Provider, h *harvester.Harvester, autoPaste bool, pasteWinID int) Model {
+func New(p provider.Provider, h *harvester.Harvester, cfg config.Config, pasteWinID int) Model {
 	return Model{
-		provider:   p,
-		harvester:  h,
-		autoPaste:  autoPaste,
-		pasteWinID: pasteWinID,
-		bundle:     h.Latest(),
+		provider:            p,
+		harvester:           h,
+		cfg:                 cfg,
+		autoPaste:           cfg.AutoPaste,
+		pasteWinID:          pasteWinID,
+		bundle:              h.Latest(),
+		originalProvider:    p,
+		originalProviderCfg: cfg.Provider,
 	}
 }
 
@@ -96,6 +118,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case idleFiredMsg:
+		// Drop stale timers from earlier keystrokes — only the latest
+		// one matches m.idleGen. Without this, every keystroke schedules
+		// an additional 600ms timer and they all fire in sequence, each
+		// cancelling the in-flight inflation.
+		if msg.Gen != m.idleGen {
+			return m, nil
+		}
 		return m.startInflation()
 
 	case inflateStartedMsg:
@@ -164,6 +193,20 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.helpOpen = false
 		return m, nil
 	}
+	// `p` from the help overlay cycles through providers (the originally-
+	// configured one + each detected Ollama model). Only handled while
+	// help is open so it doesn't shadow the letter "p" in normal typing.
+	if m.helpOpen && key == "p" {
+		return m.cycleProvider()
+	}
+
+	// Track whether this keystroke actually mutated the seed. If not (e.g.
+	// stray mouse events synthesized by tmux mouse-on, focus changes,
+	// modifier-only keys), we MUST NOT fire idleAfter — that would cancel
+	// a running inflation that's already producing output. Surfaced by
+	// real-world use: slow local models would get cut off mid-stream
+	// when the user did anything in the pane.
+	seedChanged := false
 
 	switch key {
 	case "ctrl+c":
@@ -192,23 +235,31 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.seed = m.seed[:len(m.seed)-1]
 			// Typing (or backspacing) clears any persistent error.
 			m.errBanner = ""
+			seedChanged = true
 		}
 	case " ", "space":
 		m.seed += " "
 		m.errBanner = ""
+		seedChanged = true
 	default:
 		if k.Type == tea.KeyRunes {
 			m.seed += string(k.Runes)
 			m.errBanner = ""
+			seedChanged = true
 		} else if k.Type == tea.KeySpace {
 			m.seed += " "
 			m.errBanner = ""
+			seedChanged = true
 		}
+	}
+	if !seedChanged {
+		return m, nil
 	}
 	if m.preview != "" {
 		m.stale = true
 	}
-	return m, idleAfter(idleDelay)
+	m.idleGen++
+	return m, idleAfter(idleDelay, m.idleGen)
 }
 
 func (m Model) send() (tea.Model, tea.Cmd) {
@@ -284,8 +335,8 @@ func (m Model) startInflation() (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg { return inflateStartedMsg{ReqID: id} }
 }
 
-func idleAfter(d time.Duration) tea.Cmd {
-	return tea.Tick(d, func(time.Time) tea.Msg { return idleFiredMsg{} })
+func idleAfter(d time.Duration, gen int) tea.Cmd {
+	return tea.Tick(d, func(time.Time) tea.Msg { return idleFiredMsg{Gen: gen} })
 }
 
 func clearToastAfter(d time.Duration) tea.Cmd {

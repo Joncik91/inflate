@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
 
+	"github.com/Joncik91/inflate/internal/config"
 	"github.com/Joncik91/inflate/internal/harvester"
 	"github.com/Joncik91/inflate/internal/provider"
 )
@@ -31,7 +32,7 @@ func (s teatestSender) Send(msg tea.Msg) { s.tm.Send(msg) }
 
 func TestTypingTriggersInflationAndUpdatesPreview(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: t.TempDir()})
-	m := New(fixedProvider{text: "Role: dev\nTask: fix bug\nContext: ctx\nConstraints: c\nOutput: o\n"}, h, false, 0)
+	m := New(fixedProvider{text: "Role: dev\nTask: fix bug\nContext: ctx\nConstraints: c\nOutput: o\n"}, h, config.Config{}, 0)
 
 	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(120, 30))
 	// The streaming path needs a sender; in production main.go injects

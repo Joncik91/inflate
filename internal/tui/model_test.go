@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/Joncik91/inflate/internal/config"
 	"github.com/Joncik91/inflate/internal/harvester"
 	"github.com/Joncik91/inflate/internal/provider"
 )
@@ -23,7 +24,7 @@ func (stubProvider) Stream(_ context.Context, _ provider.Request) (<-chan string
 
 func TestModelInitialView(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
-	m := New(stubProvider{}, h, false, 0)
+	m := New(stubProvider{}, h, config.Config{}, 0)
 	v := tea.Model(m).View()
 	if !strings.Contains(v, "type a fragment") {
 		t.Errorf("expected hint in initial view, got:\n%s", v)
@@ -32,7 +33,7 @@ func TestModelInitialView(t *testing.T) {
 
 func TestQuestionMarkTogglesHelp(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
-	m := New(stubProvider{}, h, false, 0)
+	m := New(stubProvider{}, h, config.Config{}, 0)
 
 	model, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	v1 := model.(Model).View()
@@ -49,7 +50,7 @@ func TestQuestionMarkTogglesHelp(t *testing.T) {
 
 func TestQuestionMarkInMidSentenceAppendsToSeed(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
-	m := New(stubProvider{}, h, false, 0)
+	m := New(stubProvider{}, h, config.Config{}, 0)
 	m.seed = "what's next"
 
 	model, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
@@ -64,7 +65,7 @@ func TestQuestionMarkInMidSentenceAppendsToSeed(t *testing.T) {
 
 func TestEscDismissesErrorBanner(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
-	m := New(stubProvider{}, h, false, 0)
+	m := New(stubProvider{}, h, config.Config{}, 0)
 	m.errBanner = "inflate failed: 401"
 	m.inflightID = 1
 
@@ -76,7 +77,7 @@ func TestEscDismissesErrorBanner(t *testing.T) {
 
 func TestTypingClearsErrorBanner(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
-	m := New(stubProvider{}, h, false, 0)
+	m := New(stubProvider{}, h, config.Config{}, 0)
 	m.errBanner = "clipboard error"
 
 	model, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
@@ -87,7 +88,7 @@ func TestTypingClearsErrorBanner(t *testing.T) {
 
 func TestEscClearsSeedAfterErrorAlreadyDismissed(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
-	m := New(stubProvider{}, h, false, 0)
+	m := New(stubProvider{}, h, config.Config{}, 0)
 	m.seed = "hello"
 
 	// No error banner present — Esc should clear seed (preserves v0.1.2 behavior).
@@ -162,5 +163,79 @@ func TestParseSectionsRejectsRandomText(t *testing.T) {
 	in := "just some explanatory text without any labels"
 	if got := parseSections(in); got != nil {
 		t.Errorf("freeform text should not parse as sections, got %+v", got)
+	}
+}
+
+func TestParseSectionsHandlesBoldLabels(t *testing.T) {
+	// Smaller local models (gemma4, llama3) sometimes emit markdown bold
+	// around section labels. Parser must strip the decoration.
+	in := "**Role:** dev\n**Context:** working in repo X\n**Task:** fix bug\n**Constraints:** keep it simple\n**Output:** a diff"
+	got := parseSections(in)
+	if len(got) != 5 {
+		t.Fatalf("expected 5 sections, got %d (%+v)", len(got), got)
+	}
+	if got[4].Label != "Output" || got[4].Body != "a diff" {
+		t.Errorf("Output section wrong: %+v", got[4])
+	}
+}
+
+func TestStaleIdleTimerIgnored(t *testing.T) {
+	// Debounce regression: each keystroke schedules an idleAfter. If a
+	// stale timer (Gen < current idleGen) fires while we're inflating,
+	// it must NOT trigger another startInflation, otherwise the running
+	// inflation gets cancelled mid-stream. Real-world: qwen3.6:35b would
+	// cut off after ~3 chunks because every typed character left a
+	// pending timer behind that fired during the inflation.
+	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
+	m := New(stubProvider{}, h, config.Config{}, 0)
+	m.idleGen = 5 // pretend 5 keystrokes happened
+
+	// A stale timer (gen=2) arrives.
+	model, cmd := m.Update(idleFiredMsg{Gen: 2})
+	gm := model.(Model)
+	if cmd != nil {
+		t.Errorf("stale idle timer must produce no Cmd, got %T", cmd)
+	}
+	if gm.inflightID != 0 {
+		t.Errorf("stale idle timer triggered startInflation (inflightID=%d)", gm.inflightID)
+	}
+
+	// The CURRENT timer (gen=5) arrives.
+	gm.seed = "x"
+	model2, _ := gm.Update(idleFiredMsg{Gen: 5})
+	gm2 := model2.(Model)
+	if gm2.inflightID != 1 {
+		t.Errorf("current idle timer should trigger startInflation, inflightID=%d", gm2.inflightID)
+	}
+}
+
+func TestNonMutatingKeyDoesNotFireIdle(t *testing.T) {
+	// Spurious key events (mouse-translated, modifier-only, function keys)
+	// must not fire the idle timer — that would cancel a running inflation
+	// mid-stream. Real-world signal: slow local models like qwen3.6:35b
+	// would cut off when the user did almost anything in the pane.
+	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
+	m := New(stubProvider{}, h, config.Config{}, 0)
+	m.seed = "what's next?"
+	seedBefore := m.seed
+
+	// Simulate an unrecognized key event — bubbletea sometimes synthesizes
+	// these from mouse / focus events when an app doesn't capture mouse.
+	model, cmd := m.Update(tea.KeyMsg{Type: tea.KeyF1})
+	gm := model.(Model)
+	if gm.seed != seedBefore {
+		t.Errorf("seed mutated by F1 keypress: %q -> %q", seedBefore, gm.seed)
+	}
+	if cmd != nil {
+		t.Errorf("expected nil cmd (no idle timer) for non-mutating key, got: %T", cmd)
+	}
+}
+
+func TestParseSectionsHandlesHeadingLabels(t *testing.T) {
+	// Some models emit ## Heading style. Parser must strip.
+	in := "## Role: dev\n## Context: ctx\n## Task: t\n## Constraints: c\n## Output: o"
+	got := parseSections(in)
+	if len(got) != 5 {
+		t.Fatalf("expected 5 sections from ## headings, got %d", len(got))
 	}
 }
