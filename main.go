@@ -158,7 +158,7 @@ func main() {
 	go h.Run(rootContext())
 
 	// TUI
-	m := tui.New(prov, h, cfg.AutoPaste, *winID)
+	m := tui.New(prov, h, cfg, *winID)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	// Inject the program ref into the model so streaming inflation Cmds
 	// can push chunks via p.Send. Sent before p.Run starts processing.

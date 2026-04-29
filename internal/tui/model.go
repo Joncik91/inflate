@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/Joncik91/inflate/internal/config"
 	"github.com/Joncik91/inflate/internal/harvester"
 	"github.com/Joncik91/inflate/internal/inflater"
 	"github.com/Joncik91/inflate/internal/output"
@@ -24,6 +25,15 @@ type Model struct {
 	program    Sender // tea.Program — used to push streamed chunks
 	autoPaste  bool
 	pasteWinID int
+
+	// cfg is the loaded config snapshot; mutated when the user toggles
+	// providers via `p` so the change persists to disk and across launches.
+	cfg config.Config
+	// previousProvider holds the provider we'll restore when toggling back
+	// from Ollama. Set when switching INTO Ollama. nil if there's nothing
+	// to restore (cold start with Ollama already configured).
+	previousProvider     provider.Provider
+	previousProviderCfg  config.ProviderConfig
 
 	seed           string
 	preview        string
@@ -57,11 +67,12 @@ type Model struct {
 // called, the caller MUST call SetProgram on the model captured by
 // the program (in practice: pass program in via a setter, see main.go)
 // so the streaming inflation Cmd can push chunks through Program.Send.
-func New(p provider.Provider, h *harvester.Harvester, autoPaste bool, pasteWinID int) Model {
+func New(p provider.Provider, h *harvester.Harvester, cfg config.Config, pasteWinID int) Model {
 	return Model{
 		provider:   p,
 		harvester:  h,
-		autoPaste:  autoPaste,
+		cfg:        cfg,
+		autoPaste:  cfg.AutoPaste,
 		pasteWinID: pasteWinID,
 		bundle:     h.Latest(),
 	}
@@ -163,6 +174,12 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.helpOpen && key == "esc" {
 		m.helpOpen = false
 		return m, nil
+	}
+	// `p` from the help overlay toggles between the configured provider
+	// and a local Ollama. Only handled while help is open so it doesn't
+	// shadow the letter "p" in normal typing.
+	if m.helpOpen && key == "p" {
+		return m.toggleProvider()
 	}
 
 	switch key {

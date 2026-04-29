@@ -55,6 +55,7 @@ Inflate reads your project state in parallel — git diff, shell history, files 
 | Tab | force inflate now (skip the 600 ms idle wait) |
 | Esc | dismiss errors, then clear input + preview |
 | `?` | toggle help overlay |
+| `p` (in help) | switch between cloud provider and local Ollama |
 | Ctrl-C | quit |
 
 The TUI streams the inflated prompt in as it arrives. While waiting for the first token a `⠹ Inflating…` spinner shows below the preview. Errors sit in a red banner until you type or press Esc — they don't flash by.

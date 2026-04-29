@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/Joncik91/inflate/internal/config"
 	"github.com/Joncik91/inflate/internal/harvester"
 	"github.com/Joncik91/inflate/internal/provider"
 )
@@ -23,7 +24,7 @@ func (stubProvider) Stream(_ context.Context, _ provider.Request) (<-chan string
 
 func TestModelInitialView(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
-	m := New(stubProvider{}, h, false, 0)
+	m := New(stubProvider{}, h, config.Config{}, 0)
 	v := tea.Model(m).View()
 	if !strings.Contains(v, "type a fragment") {
 		t.Errorf("expected hint in initial view, got:\n%s", v)
@@ -32,7 +33,7 @@ func TestModelInitialView(t *testing.T) {
 
 func TestQuestionMarkTogglesHelp(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
-	m := New(stubProvider{}, h, false, 0)
+	m := New(stubProvider{}, h, config.Config{}, 0)
 
 	model, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	v1 := model.(Model).View()
@@ -49,7 +50,7 @@ func TestQuestionMarkTogglesHelp(t *testing.T) {
 
 func TestQuestionMarkInMidSentenceAppendsToSeed(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
-	m := New(stubProvider{}, h, false, 0)
+	m := New(stubProvider{}, h, config.Config{}, 0)
 	m.seed = "what's next"
 
 	model, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
@@ -64,7 +65,7 @@ func TestQuestionMarkInMidSentenceAppendsToSeed(t *testing.T) {
 
 func TestEscDismissesErrorBanner(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
-	m := New(stubProvider{}, h, false, 0)
+	m := New(stubProvider{}, h, config.Config{}, 0)
 	m.errBanner = "inflate failed: 401"
 	m.inflightID = 1
 
@@ -76,7 +77,7 @@ func TestEscDismissesErrorBanner(t *testing.T) {
 
 func TestTypingClearsErrorBanner(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
-	m := New(stubProvider{}, h, false, 0)
+	m := New(stubProvider{}, h, config.Config{}, 0)
 	m.errBanner = "clipboard error"
 
 	model, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
@@ -87,7 +88,7 @@ func TestTypingClearsErrorBanner(t *testing.T) {
 
 func TestEscClearsSeedAfterErrorAlreadyDismissed(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
-	m := New(stubProvider{}, h, false, 0)
+	m := New(stubProvider{}, h, config.Config{}, 0)
 	m.seed = "hello"
 
 	// No error banner present — Esc should clear seed (preserves v0.1.2 behavior).
