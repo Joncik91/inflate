@@ -60,6 +60,13 @@ type Model struct {
 	// replaced with the keybinding cheat sheet.
 	helpOpen bool
 
+	// idleGen is bumped on every seed-mutating keypress. The pending
+	// idleAfter timer carries the generation it was scheduled with; we
+	// only honor a fired timer if its Gen matches m.idleGen (the latest).
+	// This makes idleAfter effectively a debounced single-fire — older
+	// timers are ignored when they expire.
+	idleGen int
+
 	width  int
 	height int
 }
@@ -111,6 +118,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case idleFiredMsg:
+		// Drop stale timers from earlier keystrokes — only the latest
+		// one matches m.idleGen. Without this, every keystroke schedules
+		// an additional 600ms timer and they all fire in sequence, each
+		// cancelling the in-flight inflation.
+		if msg.Gen != m.idleGen {
+			return m, nil
+		}
 		return m.startInflation()
 
 	case inflateStartedMsg:
@@ -244,7 +258,8 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.preview != "" {
 		m.stale = true
 	}
-	return m, idleAfter(idleDelay)
+	m.idleGen++
+	return m, idleAfter(idleDelay, m.idleGen)
 }
 
 func (m Model) send() (tea.Model, tea.Cmd) {
@@ -320,8 +335,8 @@ func (m Model) startInflation() (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg { return inflateStartedMsg{ReqID: id} }
 }
 
-func idleAfter(d time.Duration) tea.Cmd {
-	return tea.Tick(d, func(time.Time) tea.Msg { return idleFiredMsg{} })
+func idleAfter(d time.Duration, gen int) tea.Cmd {
+	return tea.Tick(d, func(time.Time) tea.Msg { return idleFiredMsg{Gen: gen} })
 }
 
 func clearToastAfter(d time.Duration) tea.Cmd {

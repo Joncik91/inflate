@@ -179,6 +179,36 @@ func TestParseSectionsHandlesBoldLabels(t *testing.T) {
 	}
 }
 
+func TestStaleIdleTimerIgnored(t *testing.T) {
+	// Debounce regression: each keystroke schedules an idleAfter. If a
+	// stale timer (Gen < current idleGen) fires while we're inflating,
+	// it must NOT trigger another startInflation, otherwise the running
+	// inflation gets cancelled mid-stream. Real-world: qwen3.6:35b would
+	// cut off after ~3 chunks because every typed character left a
+	// pending timer behind that fired during the inflation.
+	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
+	m := New(stubProvider{}, h, config.Config{}, 0)
+	m.idleGen = 5 // pretend 5 keystrokes happened
+
+	// A stale timer (gen=2) arrives.
+	model, cmd := m.Update(idleFiredMsg{Gen: 2})
+	gm := model.(Model)
+	if cmd != nil {
+		t.Errorf("stale idle timer must produce no Cmd, got %T", cmd)
+	}
+	if gm.inflightID != 0 {
+		t.Errorf("stale idle timer triggered startInflation (inflightID=%d)", gm.inflightID)
+	}
+
+	// The CURRENT timer (gen=5) arrives.
+	gm.seed = "x"
+	model2, _ := gm.Update(idleFiredMsg{Gen: 5})
+	gm2 := model2.(Model)
+	if gm2.inflightID != 1 {
+		t.Errorf("current idle timer should trigger startInflation, inflightID=%d", gm2.inflightID)
+	}
+}
+
 func TestNonMutatingKeyDoesNotFireIdle(t *testing.T) {
 	// Spurious key events (mouse-translated, modifier-only, function keys)
 	// must not fire the idle timer — that would cancel a running inflation

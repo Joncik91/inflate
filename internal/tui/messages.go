@@ -27,8 +27,14 @@ type inflateFailMsg struct {
 // spinnerTickMsg fires every spinnerInterval while inflating.
 type spinnerTickMsg struct{}
 
-// idleFiredMsg signals the per-keystroke idle timer expired.
-type idleFiredMsg struct{}
+// idleFiredMsg signals the per-keystroke idle timer expired. The Gen
+// field carries the generation counter the timer was scheduled with —
+// the model only acts when it matches the current idleGen, so older
+// timers from earlier keystrokes get ignored. Without this, every
+// keystroke schedules an additional 600ms timer and they all fire in
+// sequence, each cancelling the in-flight inflation that the previous
+// one started.
+type idleFiredMsg struct{ Gen int }
 
 // bundleUpdatedMsg is sent when the harvester publishes a new ContextBundle.
 type bundleUpdatedMsg struct{ Bundle harvester.ContextBundle }
