@@ -14,9 +14,8 @@ import (
 	"github.com/Joncik91/inflate/internal/intake"
 )
 
-// configHomeOverride redirects ConfigDir() to a temp path so the toggle's
-// SaveConfig call doesn't clobber the user's real ~/.config/inflate. The
-// XDG_CONFIG_HOME env var is honored by config.ConfigDir.
+// configHomeOverride redirects ConfigDir() to a temp path so SaveConfig
+// in cycleProvider doesn't clobber the user's real ~/.config/inflate.
 func configHomeOverride(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -26,33 +25,40 @@ func configHomeOverride(t *testing.T) string {
 
 func stubTUIProbe(t *testing.T, models []intake.OllamaModel, ok bool) {
 	t.Helper()
-	// We need to override the *intake* package's probe used by our toggle.
-	// Since intake exposes ProbeOllama as a function var indirectly via
-	// probeOllama (intake-internal), we override by spinning up a real
-	// httptest server and pointing toggleProvider's ProbeOllama there.
-	// But ProbeOllama is called with "" → localhost:11434, not configurable.
-	// Easier: set up a fake Ollama on localhost dynamically isn't safe in tests.
-	// So we expose a per-test override on the function variable.
 	prev := probeForTest
 	probeForTest = func() ([]intake.OllamaModel, bool) { return models, ok }
 	t.Cleanup(func() { probeForTest = prev })
 }
 
-func TestToggleProviderCloudToOllama(t *testing.T) {
-	configHomeOverride(t)
-
-	// Mock Ollama daemon for the Validate roundtrip.
+// fakeOllamaServer returns a server that satisfies Ollama.Validate (ie
+// answers /api/tags listing the named models). Used so the cycle's
+// Validate roundtrip succeeds in tests.
+func fakeOllamaServer(t *testing.T, modelNames ...string) *httptest.Server {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"models":[{"name":"gemma4:26b","details":{"family":"gemma4","parameter_size":"26B","quantization_level":"Q4_K_M"}}]}`))
+		var sb strings.Builder
+		sb.WriteString(`{"models":[`)
+		for i, n := range modelNames {
+			if i > 0 {
+				sb.WriteString(",")
+			}
+			sb.WriteString(`{"name":"` + n + `"}`)
+		}
+		sb.WriteString(`]}`)
+		_, _ = w.Write([]byte(sb.String()))
 	}))
-	defer srv.Close()
-	t.Setenv("OLLAMA_TEST_URL", srv.URL)
+	t.Cleanup(srv.Close)
+	return srv
+}
 
-	stubTUIProbe(t, []intake.OllamaModel{
-		{Name: "gemma4:26b", Family: "gemma4"},
-	}, true)
+func TestCycleProviderCloudToOllama(t *testing.T) {
+	configHomeOverride(t)
+	srv := fakeOllamaServer(t, "gemma4:26b")
 	t.Cleanup(func() { ollamaURLForTest = "" })
 	ollamaURLForTest = srv.URL
+	stubTUIProbe(t, []intake.OllamaModel{
+		{Name: "gemma4:26b", Family: "gemma4", ParameterSize: "26B"},
+	}, true)
 
 	cfg := config.Config{
 		AutoPaste: false,
@@ -66,16 +72,16 @@ func TestToggleProviderCloudToOllama(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: t.TempDir()})
 	m := New(stubProvider{}, h, cfg, 0)
 
-	got, _ := m.toggleProvider()
+	got, _ := m.cycleProvider()
 	gm := got.(Model)
 	if gm.cfg.Provider.Kind != "ollama" {
-		t.Errorf("expected kind=ollama, got %q", gm.cfg.Provider.Kind)
+		t.Errorf("expected kind=ollama after first cycle, got %q", gm.cfg.Provider.Kind)
 	}
 	if gm.cfg.Provider.Model != "gemma4:26b" {
 		t.Errorf("expected model=gemma4:26b, got %q", gm.cfg.Provider.Model)
 	}
-	if gm.previousProviderCfg.Kind != "openai_compat" {
-		t.Errorf("previous provider not remembered, got kind=%q", gm.previousProviderCfg.Kind)
+	if gm.originalProviderCfg.Kind != "openai_compat" {
+		t.Errorf("original config not preserved, got kind=%q", gm.originalProviderCfg.Kind)
 	}
 	if !strings.Contains(gm.toast, "switched to ollama:gemma4:26b") {
 		t.Errorf("expected toast about switch, got: %q", gm.toast)
@@ -83,19 +89,93 @@ func TestToggleProviderCloudToOllama(t *testing.T) {
 	if gm.helpOpen {
 		t.Errorf("help should auto-close after switch")
 	}
+}
 
-	// Verify config was saved to disk.
-	saved, err := config.LoadConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
+func TestCycleProviderWrapsBackToOriginal(t *testing.T) {
+	configHomeOverride(t)
+	srv := fakeOllamaServer(t, "gemma4:26b")
+	t.Cleanup(func() { ollamaURLForTest = "" })
+	ollamaURLForTest = srv.URL
+	stubTUIProbe(t, []intake.OllamaModel{
+		{Name: "gemma4:26b", Family: "gemma4", ParameterSize: "26B"},
+	}, true)
+
+	cfg := config.Config{
+		Provider: config.ProviderConfig{
+			Kind:    "openai_compat",
+			BaseURL: "https://api.deepseek.com/v1",
+			Model:   "deepseek-chat",
+		},
 	}
-	if saved.Provider.Kind != "ollama" {
-		t.Errorf("saved config kind=%q, want ollama", saved.Provider.Kind)
+	h, _ := harvester.New(harvester.Options{ProjectDir: t.TempDir()})
+	m := New(stubProvider{}, h, cfg, 0)
+
+	// First press: cloud → ollama
+	got, _ := m.cycleProvider()
+	gm := got.(Model)
+	if gm.cfg.Provider.Kind != "ollama" {
+		t.Fatalf("step 1: expected ollama, got %q", gm.cfg.Provider.Kind)
+	}
+
+	// Second press: ollama → cloud (wrap-around)
+	got2, _ := gm.cycleProvider()
+	gm2 := got2.(Model)
+	if gm2.cfg.Provider.Kind != "openai_compat" {
+		t.Errorf("step 2: expected back to openai_compat, got %q", gm2.cfg.Provider.Kind)
+	}
+	if gm2.cfg.Provider.Model != "deepseek-chat" {
+		t.Errorf("step 2: expected deepseek-chat, got %q", gm2.cfg.Provider.Model)
 	}
 }
 
-func TestToggleProviderOllamaWithoutPrevious(t *testing.T) {
+func TestCycleProviderWalksMultipleOllamaModels(t *testing.T) {
 	configHomeOverride(t)
+	srv := fakeOllamaServer(t, "gemma4:26b", "qwen3.6:35b")
+	t.Cleanup(func() { ollamaURLForTest = "" })
+	ollamaURLForTest = srv.URL
+	stubTUIProbe(t, []intake.OllamaModel{
+		{Name: "qwen3.6:35b", Family: "qwen35moe", ParameterSize: "36B"},
+		{Name: "gemma4:26b", Family: "gemma4", ParameterSize: "26B"},
+	}, true)
+
+	cfg := config.Config{
+		Provider: config.ProviderConfig{
+			Kind:    "openai_compat",
+			BaseURL: "https://api.deepseek.com/v1",
+			Model:   "deepseek-chat",
+		},
+	}
+	h, _ := harvester.New(harvester.Options{ProjectDir: t.TempDir()})
+	m := New(stubProvider{}, h, cfg, 0)
+
+	// Press 1: original → smallest ollama (gemma4:26b)
+	got, _ := m.cycleProvider()
+	gm := got.(Model)
+	if gm.cfg.Provider.Model != "gemma4:26b" {
+		t.Fatalf("step 1: expected gemma4:26b (smallest), got %q", gm.cfg.Provider.Model)
+	}
+
+	// Press 2: gemma → next ollama (qwen3.6:35b)
+	got2, _ := gm.cycleProvider()
+	gm2 := got2.(Model)
+	if gm2.cfg.Provider.Model != "qwen3.6:35b" {
+		t.Errorf("step 2: expected qwen3.6:35b, got %q", gm2.cfg.Provider.Model)
+	}
+
+	// Press 3: qwen → wrap to original (deepseek)
+	got3, _ := gm2.cycleProvider()
+	gm3 := got3.(Model)
+	if gm3.cfg.Provider.Model != "deepseek-chat" {
+		t.Errorf("step 3: expected wrap to deepseek-chat, got %q", gm3.cfg.Provider.Model)
+	}
+}
+
+func TestCycleProviderOriginalIsOllamaAndOnlyOneModel(t *testing.T) {
+	configHomeOverride(t)
+	stubTUIProbe(t, []intake.OllamaModel{
+		{Name: "gemma4:26b", Family: "gemma4", ParameterSize: "26B"},
+	}, true)
+
 	cfg := config.Config{
 		Provider: config.ProviderConfig{
 			Kind:    "ollama",
@@ -105,19 +185,15 @@ func TestToggleProviderOllamaWithoutPrevious(t *testing.T) {
 	}
 	h, _ := harvester.New(harvester.Options{ProjectDir: t.TempDir()})
 	m := New(stubProvider{}, h, cfg, 0)
-	// previousProvider is nil — booted with Ollama already configured.
 
-	got, _ := m.toggleProvider()
+	got, _ := m.cycleProvider()
 	gm := got.(Model)
-	if !strings.Contains(gm.toast, "no previous provider") {
-		t.Errorf("expected hint about config provider, got: %q", gm.toast)
-	}
-	if gm.cfg.Provider.Kind != "ollama" {
-		t.Errorf("provider should not have changed, got %q", gm.cfg.Provider.Kind)
+	if !strings.Contains(gm.toast, "no other providers") {
+		t.Errorf("expected 'no other providers' toast, got: %q", gm.toast)
 	}
 }
 
-func TestToggleProviderOllamaUnreachable(t *testing.T) {
+func TestCycleProviderOllamaUnreachable(t *testing.T) {
 	configHomeOverride(t)
 	stubTUIProbe(t, nil, false)
 
@@ -131,17 +207,17 @@ func TestToggleProviderOllamaUnreachable(t *testing.T) {
 	h, _ := harvester.New(harvester.Options{ProjectDir: t.TempDir()})
 	m := New(stubProvider{}, h, cfg, 0)
 
-	got, _ := m.toggleProvider()
+	got, _ := m.cycleProvider()
 	gm := got.(Model)
-	if !strings.Contains(gm.toast, "Ollama not detected") {
-		t.Errorf("expected 'not detected' toast, got: %q", gm.toast)
+	if !strings.Contains(gm.toast, "no other providers") {
+		t.Errorf("expected 'no other providers' toast, got: %q", gm.toast)
 	}
 	if gm.cfg.Provider.Kind != "anthropic" {
 		t.Errorf("provider should not have changed, got %q", gm.cfg.Provider.Kind)
 	}
 }
 
-func TestPKeyTogglesProviderInHelpOverlay(t *testing.T) {
+func TestPKeyCyclesProviderInHelpOverlay(t *testing.T) {
 	configHomeOverride(t)
 	stubTUIProbe(t, nil, false) // Ollama not detected — toast only
 
@@ -158,7 +234,7 @@ func TestPKeyTogglesProviderInHelpOverlay(t *testing.T) {
 		t.Error("expected toast after pressing p in help overlay")
 	}
 
-	// Without help open, `p` should NOT trigger toggle — it appends to seed.
+	// Without help open, `p` should NOT trigger cycle — it appends to seed.
 	m2 := New(stubProvider{}, h, cfg, 0)
 	model2, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
 	gm2 := model2.(Model)
@@ -191,6 +267,28 @@ func TestPickSmallestModelHandlesMissingSizes(t *testing.T) {
 	})
 	if got != "real:7b" {
 		t.Errorf("should prefer model with parseable size, got %q", got)
+	}
+}
+
+func TestSortBySize(t *testing.T) {
+	models := []intake.OllamaModel{
+		{Name: "qwen3.6:35b", ParameterSize: "36.0B"},
+		{Name: "gemma4:26b", ParameterSize: "25.8B"},
+		{Name: "llama3:8b", ParameterSize: "7B"},
+		{Name: "mystery:latest", ParameterSize: ""},
+	}
+	sortBySize(models)
+	if models[0].Name != "llama3:8b" {
+		t.Errorf("smallest first; got %q at index 0", models[0].Name)
+	}
+	if models[1].Name != "gemma4:26b" {
+		t.Errorf("got %q at index 1", models[1].Name)
+	}
+	if models[2].Name != "qwen3.6:35b" {
+		t.Errorf("got %q at index 2", models[2].Name)
+	}
+	if models[3].Name != "mystery:latest" {
+		t.Errorf("unparseable size should sort last; got %q at index 3", models[3].Name)
 	}
 }
 

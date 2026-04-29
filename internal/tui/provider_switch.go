@@ -20,45 +20,25 @@ var (
 	ollamaURLForTest string
 )
 
-// toggleProvider switches between the configured cloud provider and a
-// local Ollama, in either direction:
-//
-//   - cloud → ollama: probe localhost:11434, build a fresh Ollama provider
-//     against the first chat-capable model, save the new config to disk,
-//     remember the previous provider so we can switch back.
-//   - ollama → cloud: restore the in-memory previous provider/config.
-//     If we don't have one (e.g. inflate booted with Ollama already
-//     configured), tell the user to use `inflate config provider`.
-//
-// Cancels any in-flight inflation before swapping. Toasts the result.
-func (m Model) toggleProvider() (tea.Model, tea.Cmd) {
-	if m.cancelInflight != nil {
-		m.cancelInflight()
-		m.cancelInflight = nil
-	}
-	m.inflating = false
+// cycleEntry is one stop on the `p`-key carousel.
+type cycleEntry struct {
+	cfg      config.ProviderConfig
+	provider provider.Provider // pre-built when known; nil for ollama models we build on demand
+}
 
-	if m.cfg.Provider.Kind == "ollama" {
-		// Switch back to the previous provider, if we have one in memory.
-		if m.previousProvider == nil {
-			m.toast = "no previous provider — use `inflate config provider`"
-			return m, clearToastAfter(toastDuration)
-		}
-		m.cfg.Provider = m.previousProviderCfg
-		m.provider = m.previousProvider
-		m.previousProvider = nil
-		m.previousProviderCfg = config.ProviderConfig{}
-		if err := config.SaveConfig(m.cfg); err != nil {
-			m.errBanner = "save config: " + err.Error()
-			return m, nil
-		}
-		m.helpOpen = false
-		m.toast = "switched to " + m.provider.Name() + " ✓"
-		return m, clearToastAfter(toastDuration)
+// providerCycle returns the ordered list of providers `p` rotates through.
+// The first entry is whatever was originally in config.toml at boot
+// (anchor for "go back to cloud"). Subsequent entries are each Ollama
+// chat-capable model the probe finds, sorted smallest → largest by
+// parameter count so the lighter model comes first.
+//
+// If the original was Ollama and only one model is pulled, the list has
+// just that one entry and pressing `p` is a no-op (toast says so).
+func (m Model) providerCycle() []cycleEntry {
+	out := []cycleEntry{
+		{cfg: m.originalProviderCfg, provider: m.originalProvider},
 	}
 
-	// cloud → ollama path. Probe with a 500ms timeout so the UI doesn't
-	// freeze if Ollama isn't running.
 	var (
 		models []intake.OllamaModel
 		ok     bool
@@ -69,53 +49,126 @@ func (m Model) toggleProvider() (tea.Model, tea.Cmd) {
 		models, ok = intake.ProbeOllama("")
 	}
 	if !ok {
-		m.toast = "Ollama not detected on localhost:11434"
-		return m, clearToastAfter(toastDuration)
-	}
-	picked := pickSmallestModel(models)
-
-	// Build the Ollama provider and verify the daemon really answers
-	// `/api/tags` before swapping (probe was best-effort).
-	ollama := provider.NewOllama(picked, ollamaURLForTest)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	if err := ollama.Validate(ctx); err != nil {
-		m.toast = "ollama: " + err.Error()
-		return m, clearToastAfter(toastDuration)
+		return out
 	}
 
-	// Remember the previous provider so `p` can flip back.
-	m.previousProvider = m.provider
-	m.previousProviderCfg = m.cfg.Provider
+	// Sort by parameter size, smallest first.
+	sortBySize(models)
 
 	baseURL := ollamaURLForTest
 	if baseURL == "" {
 		baseURL = "http://localhost:11434"
 	}
-	m.cfg.Provider = config.ProviderConfig{
-		Kind:    "ollama",
-		Model:   picked,
-		BaseURL: baseURL,
+	for _, mdl := range models {
+		oc := config.ProviderConfig{
+			Kind:    "ollama",
+			Model:   mdl.Name,
+			BaseURL: baseURL,
+		}
+		// If the original config matches this exact ollama model, skip —
+		// we already have it as entry 0 and we don't want a duplicate stop.
+		if m.originalProviderCfg.Kind == "ollama" && m.originalProviderCfg.Model == mdl.Name {
+			continue
+		}
+		out = append(out, cycleEntry{cfg: oc})
 	}
+	return out
+}
+
+// cycleProvider advances to the next entry on the cycle. Pressing `p`
+// repeatedly walks: original (e.g. DeepSeek) → ollama:gemma4:26b →
+// ollama:qwen3.6:35b → original → ... Saves to disk and toasts the result.
+//
+// Cancels any in-flight inflation before swapping.
+func (m Model) cycleProvider() (tea.Model, tea.Cmd) {
+	if m.cancelInflight != nil {
+		m.cancelInflight()
+		m.cancelInflight = nil
+	}
+	m.inflating = false
+
+	cycle := m.providerCycle()
+	if len(cycle) <= 1 {
+		m.toast = "no other providers detected — start `ollama serve` or use `inflate config provider`"
+		return m, clearToastAfter(toastDuration)
+	}
+
+	// Find the current entry's position. Match by Kind+Model+BaseURL —
+	// good enough since we built the cycle ourselves.
+	curIdx := 0
+	for i, e := range cycle {
+		if e.cfg == m.cfg.Provider {
+			curIdx = i
+			break
+		}
+	}
+	nextIdx := (curIdx + 1) % len(cycle)
+	next := cycle[nextIdx]
+
+	// Build the new provider if it's an Ollama entry (we don't pre-build
+	// these to avoid hitting /api/tags for every model on startup).
+	newProv := next.provider
+	if newProv == nil {
+		newProv = provider.NewOllama(next.cfg.Model, next.cfg.BaseURL)
+		// Verify the daemon answers /api/tags before swapping. Probe was
+		// best-effort; this catches the daemon-just-died race.
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		if err := newProv.Validate(ctx); err != nil {
+			cancel()
+			m.toast = "ollama: " + err.Error()
+			return m, clearToastAfter(toastDuration)
+		}
+		cancel()
+	}
+
+	m.cfg.Provider = next.cfg
 	if err := config.SaveConfig(m.cfg); err != nil {
 		m.errBanner = "save config: " + err.Error()
 		return m, nil
 	}
-	m.provider = ollama
+	m.provider = newProv
 	m.helpOpen = false
 
 	suffix := ""
-	if len(models) > 1 {
-		suffix = fmt.Sprintf(" (smallest of %d, use `inflate config provider` to pick others)", len(models))
+	if next.cfg.Kind == "ollama" {
+		suffix = " — first inflate may take 30-60s to load model"
 	}
-	m.toast = "switched to " + ollama.Name() + " ✓ — first inflate may take 30-60s to load model" + suffix
+	m.toast = fmt.Sprintf("switched to %s ✓ (%d/%d) %s",
+		newProv.Name(), nextIdx+1, len(cycle), suffix)
 	return m, clearToastAfter(toastDuration)
+}
+
+// sortBySize sorts Ollama models in place, smallest parameter count first.
+// Models with unparseable sizes go last (treated as "unknown / probably big").
+func sortBySize(models []intake.OllamaModel) {
+	for i := 1; i < len(models); i++ {
+		for j := i; j > 0; j-- {
+			a := paramRank(models[j-1])
+			b := paramRank(models[j])
+			if a > b {
+				models[j-1], models[j] = models[j], models[j-1]
+			}
+		}
+	}
+}
+
+// paramRank returns the model's parameter count for sorting; 0/unparseable
+// is mapped to a large sentinel so those models sort last.
+func paramRank(m intake.OllamaModel) int {
+	n := parseParamSize(m.ParameterSize)
+	if n == 0 {
+		return 1 << 30
+	}
+	return n
 }
 
 // pickSmallestModel returns the chat-capable model with the smallest
 // parameter count. Smaller models load faster (less VRAM transfer) and
 // generate faster, which matters a lot on iGPUs. Falls back to the first
 // model when sizes are unparseable.
+//
+// Retained for tests that exercise the legacy single-pick path; the
+// `p` cycle now uses sortBySize + the full ordered list.
 func pickSmallestModel(models []intake.OllamaModel) string {
 	if len(models) == 0 {
 		return ""

@@ -26,14 +26,16 @@ type Model struct {
 	autoPaste  bool
 	pasteWinID int
 
-	// cfg is the loaded config snapshot; mutated when the user toggles
+	// cfg is the loaded config snapshot; mutated when the user cycles
 	// providers via `p` so the change persists to disk and across launches.
 	cfg config.Config
-	// previousProvider holds the provider we'll restore when toggling back
-	// from Ollama. Set when switching INTO Ollama. nil if there's nothing
-	// to restore (cold start with Ollama already configured).
-	previousProvider     provider.Provider
-	previousProviderCfg  config.ProviderConfig
+	// originalProvider + originalProviderCfg snapshot what was in
+	// config.toml when inflate booted. They anchor the `p`-key cycle so
+	// users can always get back to (e.g.) DeepSeek even after multiple
+	// switches. If inflate booted with Ollama configured, this captures
+	// that — and the cycle just rotates through Ollama models.
+	originalProvider    provider.Provider
+	originalProviderCfg config.ProviderConfig
 
 	seed           string
 	preview        string
@@ -69,12 +71,14 @@ type Model struct {
 // so the streaming inflation Cmd can push chunks through Program.Send.
 func New(p provider.Provider, h *harvester.Harvester, cfg config.Config, pasteWinID int) Model {
 	return Model{
-		provider:   p,
-		harvester:  h,
-		cfg:        cfg,
-		autoPaste:  cfg.AutoPaste,
-		pasteWinID: pasteWinID,
-		bundle:     h.Latest(),
+		provider:            p,
+		harvester:           h,
+		cfg:                 cfg,
+		autoPaste:           cfg.AutoPaste,
+		pasteWinID:          pasteWinID,
+		bundle:              h.Latest(),
+		originalProvider:    p,
+		originalProviderCfg: cfg.Provider,
 	}
 }
 
@@ -175,11 +179,11 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.helpOpen = false
 		return m, nil
 	}
-	// `p` from the help overlay toggles between the configured provider
-	// and a local Ollama. Only handled while help is open so it doesn't
-	// shadow the letter "p" in normal typing.
+	// `p` from the help overlay cycles through providers (the originally-
+	// configured one + each detected Ollama model). Only handled while
+	// help is open so it doesn't shadow the letter "p" in normal typing.
 	if m.helpOpen && key == "p" {
-		return m.toggleProvider()
+		return m.cycleProvider()
 	}
 
 	switch key {
