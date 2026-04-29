@@ -1,5 +1,7 @@
 # Inflate
 
+*Inflate reads your Claude Code session context and turns a short fragment into a fully loaded prompt — without you having to re-explain your project every time. Works today. `go install` and run.*
+
 Type a fragment in Inflate (Terminal B), get a context-loaded prompt for Claude Code (Terminal A).
 
 ```
