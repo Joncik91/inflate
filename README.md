@@ -4,7 +4,7 @@
 
 Inflate sits next to Claude Code and turns whatever you'd type — a fragment, a question, a half-formed thought — into a structured prompt loaded with your project's actual context (git, terminal history, recent Claude session). Works mid-session or from a cold start. Output lands on your clipboard, ready to paste.
 
-https://github.com/user-attachments/assets/ada67a3f-c1b4-48d6-a74d-354ca3d35a40
+https://github.com/user-attachments/assets/6702f681-01e7-460a-9524-2c5bc97ca9dd
 
 ## Install
 
@@ -47,6 +47,7 @@ Inflate reads your project state in parallel — git diff, shell history, files 
 | `inflate config` | Edit `config.toml` in `$EDITOR` |
 | `inflate config profile` | Edit `profile.toml` |
 | `inflate config env` | Edit `.env` (rotate keys, add a second provider) |
+| `inflate config provider` | Re-run the provider wizard (switch DeepSeek ↔ Ollama, rotate keys, etc.) |
 
 | Key | Action |
 |---|---|

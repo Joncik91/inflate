@@ -178,6 +178,42 @@ func TestRunFullSetupOllamaNotDetected(t *testing.T) {
 	}
 }
 
+func TestRunProviderOnlyOllama(t *testing.T) {
+	stubProbe(t, []OllamaModel{
+		{Name: "gemma4:26b", ParameterSize: "26B", Quantization: "Q4_K_M", Family: "gemma4"},
+	}, true)
+
+	in := strings.NewReader("l\n1\n")
+	var out strings.Builder
+	prov, keyName, keyVal, err := RunProviderOnly(in, &out, &stubKeyReader{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prov.Kind != "ollama" || prov.Model != "gemma4:26b" {
+		t.Errorf("got %+v", prov)
+	}
+	if keyName != "" || keyVal != "" {
+		t.Errorf("ollama path must skip key, got name=%q value=%q", keyName, keyVal)
+	}
+}
+
+func TestRunProviderOnlyAnthropic(t *testing.T) {
+	stubProbe(t, nil, false)
+
+	in := strings.NewReader("a\nclaude-haiku-4-5\n")
+	var out strings.Builder
+	prov, keyName, keyVal, err := RunProviderOnly(in, &out, &stubKeyReader{key: "sk-ant"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prov.Kind != "anthropic" {
+		t.Errorf("kind = %q", prov.Kind)
+	}
+	if keyName != "ANTHROPIC_API_KEY" || keyVal != "sk-ant" {
+		t.Errorf("key info wrong: name=%q value=%q", keyName, keyVal)
+	}
+}
+
 func TestResolveOllamaPickInvalid(t *testing.T) {
 	models := []OllamaModel{{Name: "gemma4:26b"}}
 	if _, err := resolveOllamaPick("99", models); err == nil {

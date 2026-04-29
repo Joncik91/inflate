@@ -35,6 +35,11 @@ func main() {
 			if len(os.Args) >= 3 {
 				sub = os.Args[2]
 			}
+			// `inflate config provider` re-runs the provider wizard step.
+			// Everything else falls through to the editor-based file edit.
+			if sub == "provider" {
+				os.Exit(cli.SwitchProvider())
+			}
 			os.Exit(cli.Edit(sub))
 		}
 	}

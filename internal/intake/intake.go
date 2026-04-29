@@ -42,7 +42,30 @@ func RunFromReader(r io.Reader, w io.Writer) (config.Profile, error) {
 func RunFullSetup(r io.Reader, w io.Writer, keys KeyReader) (SetupResult, error) {
 	scanner := bufio.NewScanner(r)
 	prof := runProfile(scanner, w)
+	prov, keyName, keyVal, err := runProvider(scanner, w, keys)
+	if err != nil {
+		return SetupResult{}, err
+	}
+	return SetupResult{
+		Profile:     prof,
+		Provider:    prov,
+		APIKeyName:  keyName,
+		APIKeyValue: keyVal,
+	}, nil
+}
 
+// RunProviderOnly runs ONLY the provider+key step of the wizard. Used by
+// `inflate config provider` to switch backends after first-run is past.
+// Returns the new provider config plus key info (empty for keyless kinds).
+func RunProviderOnly(r io.Reader, w io.Writer, keys KeyReader) (config.ProviderConfig, string, string, error) {
+	scanner := bufio.NewScanner(r)
+	return runProvider(scanner, w, keys)
+}
+
+// runProvider is the shared provider-selection step. Picks a kind, resolves
+// model + base URL, prompts for the API key (skipped for keyless providers
+// like Ollama), and returns the populated ProviderConfig.
+func runProvider(scanner *bufio.Scanner, w io.Writer, keys KeyReader) (config.ProviderConfig, string, string, error) {
 	// Probe for a local Ollama before printing the menu. If found, give it
 	// top billing — local-first beats cloud-by-default for new users.
 	ollamaModels, ollamaOK := probeOllama("")
@@ -59,7 +82,7 @@ func RunFullSetup(r io.Reader, w io.Writer, keys KeyReader) (SetupResult, error)
 	switch provChoice {
 	case "l", "ollama", "local":
 		if !ollamaOK {
-			return SetupResult{}, fmt.Errorf("Ollama wasn't detected on http://localhost:11434 — start it with `ollama serve` and re-run")
+			return config.ProviderConfig{}, "", "", fmt.Errorf("Ollama wasn't detected on http://localhost:11434 — start it with `ollama serve` and re-run")
 		}
 		fmt.Fprintln(w, "Available models:")
 		for i, m := range ollamaModels {
@@ -68,7 +91,7 @@ func RunFullSetup(r io.Reader, w io.Writer, keys KeyReader) (SetupResult, error)
 		pick := askWithScanner(scanner, w, "Pick a model (1-N or full name)")
 		picked, err := resolveOllamaPick(pick, ollamaModels)
 		if err != nil {
-			return SetupResult{}, err
+			return config.ProviderConfig{}, "", "", err
 		}
 		prov.Kind = "ollama"
 		prov.Model = picked
@@ -97,27 +120,21 @@ func RunFullSetup(r io.Reader, w io.Writer, keys KeyReader) (SetupResult, error)
 		prov.Model = askWithScanner(scanner, w, "Model name?")
 		keyName = askWithScanner(scanner, w, "Env var name for the key? (e.g. MY_LOCAL_KEY)")
 	default:
-		return SetupResult{}, fmt.Errorf("unknown provider choice %q", provChoice)
+		return config.ProviderConfig{}, "", "", fmt.Errorf("unknown provider choice %q", provChoice)
 	}
 
 	if keyName == "" {
 		// No-key provider (Ollama). Skip the prompt entirely.
-		return SetupResult{Profile: prof, Provider: prov}, nil
+		return prov, "", "", nil
 	}
 	prov.APIKeyEnv = keyName
 
 	keyVal, err := keys.ReadKey(fmt.Sprintf("Paste your %s (input hidden)", keyName))
 	if err != nil {
-		return SetupResult{}, err
+		return config.ProviderConfig{}, "", "", err
 	}
 	keyVal = strings.TrimSpace(keyVal)
-
-	return SetupResult{
-		Profile:     prof,
-		Provider:    prov,
-		APIKeyName:  keyName,
-		APIKeyValue: keyVal,
-	}, nil
+	return prov, keyName, keyVal, nil
 }
 
 // resolveOllamaPick accepts either a 1-based index or a model name and

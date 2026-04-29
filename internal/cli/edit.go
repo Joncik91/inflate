@@ -83,7 +83,7 @@ func templateFor(basename string) string {
 		return `auto_paste = false
 
 [provider]
-kind        = "anthropic"           # or "openai_compat" or "google"
+kind        = "anthropic"           # or "openai_compat" / "google" / "ollama"
 model       = "claude-haiku-4-5"
 api_key_env = "ANTHROPIC_API_KEY"
 `
