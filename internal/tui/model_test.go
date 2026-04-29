@@ -179,6 +179,28 @@ func TestParseSectionsHandlesBoldLabels(t *testing.T) {
 	}
 }
 
+func TestNonMutatingKeyDoesNotFireIdle(t *testing.T) {
+	// Spurious key events (mouse-translated, modifier-only, function keys)
+	// must not fire the idle timer — that would cancel a running inflation
+	// mid-stream. Real-world signal: slow local models like qwen3.6:35b
+	// would cut off when the user did almost anything in the pane.
+	h, _ := harvester.New(harvester.Options{ProjectDir: "/tmp"})
+	m := New(stubProvider{}, h, config.Config{}, 0)
+	m.seed = "what's next?"
+	seedBefore := m.seed
+
+	// Simulate an unrecognized key event — bubbletea sometimes synthesizes
+	// these from mouse / focus events when an app doesn't capture mouse.
+	model, cmd := m.Update(tea.KeyMsg{Type: tea.KeyF1})
+	gm := model.(Model)
+	if gm.seed != seedBefore {
+		t.Errorf("seed mutated by F1 keypress: %q -> %q", seedBefore, gm.seed)
+	}
+	if cmd != nil {
+		t.Errorf("expected nil cmd (no idle timer) for non-mutating key, got: %T", cmd)
+	}
+}
+
 func TestParseSectionsHandlesHeadingLabels(t *testing.T) {
 	// Some models emit ## Heading style. Parser must strip.
 	in := "## Role: dev\n## Context: ctx\n## Task: t\n## Constraints: c\n## Output: o"

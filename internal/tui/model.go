@@ -186,6 +186,14 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.cycleProvider()
 	}
 
+	// Track whether this keystroke actually mutated the seed. If not (e.g.
+	// stray mouse events synthesized by tmux mouse-on, focus changes,
+	// modifier-only keys), we MUST NOT fire idleAfter — that would cancel
+	// a running inflation that's already producing output. Surfaced by
+	// real-world use: slow local models would get cut off mid-stream
+	// when the user did anything in the pane.
+	seedChanged := false
+
 	switch key {
 	case "ctrl+c":
 		if m.cancelInflight != nil {
@@ -213,18 +221,25 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.seed = m.seed[:len(m.seed)-1]
 			// Typing (or backspacing) clears any persistent error.
 			m.errBanner = ""
+			seedChanged = true
 		}
 	case " ", "space":
 		m.seed += " "
 		m.errBanner = ""
+		seedChanged = true
 	default:
 		if k.Type == tea.KeyRunes {
 			m.seed += string(k.Runes)
 			m.errBanner = ""
+			seedChanged = true
 		} else if k.Type == tea.KeySpace {
 			m.seed += " "
 			m.errBanner = ""
+			seedChanged = true
 		}
+	}
+	if !seedChanged {
+		return m, nil
 	}
 	if m.preview != "" {
 		m.stale = true
