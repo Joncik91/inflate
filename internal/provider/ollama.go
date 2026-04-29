@@ -61,8 +61,15 @@ type ollamaChatChunk struct {
 	Message struct {
 		Content string `json:"content"`
 	} `json:"message"`
-	Done bool `json:"done"`
+	Done       bool   `json:"done"`
+	DoneReason string `json:"done_reason,omitempty"`
 }
+
+// ollamaTruncationMarker is appended to the stream when Ollama reports
+// done_reason = "length" — the model hit num_predict before finishing.
+// Inflate's preview pane shows this so the user knows the prompt was cut
+// rather than seeing a silent half-rendered output.
+const ollamaTruncationMarker = "\n\n[…cut off — increase num_predict in config or rephrase the seed]"
 
 // Stream issues a /api/chat request and emits each NDJSON line's content
 // chunk on the returned channel. Closes when `done: true` arrives or ctx
@@ -80,7 +87,11 @@ func (o *Ollama) Stream(ctx context.Context, req Request) (<-chan string, error)
 			{Role: "system", Content: req.System},
 			{Role: "user", Content: req.User},
 		},
-		Options: ollamaChatOptions{NumPredict: req.MaxTokens},
+		// Local models stream slower (~17 tok/s on iGPU vs hundreds on
+		// cloud) but Promptism's 5 sections need ~1500 tokens of headroom
+		// to land cleanly. Bump the inflater's default 800 → 2000 for
+		// Ollama specifically. The cost is wall-clock time, not money.
+		Options: ollamaChatOptions{NumPredict: scaleNumPredictForLocal(req.MaxTokens)},
 	}
 	buf, _ := json.Marshal(body)
 
@@ -123,11 +134,36 @@ func (o *Ollama) Stream(ctx context.Context, req Request) (<-chan string, error)
 				}
 			}
 			if chunk.Done {
+				// Surface "length" truncation so the preview shows it was
+				// cut, not silently end mid-sentence. "stop" is the clean
+				// termination — no marker needed.
+				if chunk.DoneReason == "length" {
+					select {
+					case <-ctx.Done():
+					case out <- ollamaTruncationMarker:
+					}
+				}
 				return
 			}
 		}
 	}()
 	return out, nil
+}
+
+// scaleNumPredictForLocal bumps cloud-shaped MaxTokens defaults to fit
+// Promptism's 5-section output without truncation. Cloud providers
+// rarely hit the cap; local models hit it every time on Promptism prompts
+// because the inflater passes 800 (sized for cloud round-trip latency,
+// not output length). 2000 is enough for a full Role/Context/Task/
+// Constraints/Output expansion with a couple paragraphs in Context.
+func scaleNumPredictForLocal(n int) int {
+	if n <= 0 {
+		return 2000
+	}
+	if n < 2000 {
+		return 2000
+	}
+	return n
 }
 
 // Validate hits /api/tags (instant) and confirms the configured model is pulled.
