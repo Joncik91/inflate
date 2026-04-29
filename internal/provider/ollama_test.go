@@ -134,6 +134,17 @@ func TestOllamaStreamSendsThinkFalse(t *testing.T) {
 	if think, ok := captured["think"].(bool); !ok || think {
 		t.Errorf("expected think=false in payload, got: %v", captured["think"])
 	}
+
+	// Confirm num_ctx is sent — without it, Ollama silently truncates
+	// the prompt to its 4096 default and trailing skeleton rules get
+	// dropped, producing malformed output. Regression check.
+	opts, _ := captured["options"].(map[string]interface{})
+	if opts == nil {
+		t.Fatalf("expected options block in payload, got: %v", captured)
+	}
+	if opts["num_ctx"] == nil {
+		t.Errorf("expected num_ctx in options, got: %v", opts)
+	}
 }
 
 func TestOllamaName(t *testing.T) {

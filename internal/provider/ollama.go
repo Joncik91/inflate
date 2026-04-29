@@ -55,7 +55,21 @@ type ollamaChatMessage struct {
 
 type ollamaChatOptions struct {
 	NumPredict int `json:"num_predict,omitempty"`
+	// NumCtx is the *prompt* context window. Ollama defaults this to 4096
+	// regardless of what the model actually supports. Inflate's full
+	// prompt (system rules + harvested git/jsonl/shell/file/processes
+	// blocks) routinely exceeds 4096 — when it does, Ollama silently
+	// drops the oldest tokens, which are usually the trailing skeleton
+	// rules ("emit Output:") and the model produces malformed output
+	// that's missing late sections. 16K is enough headroom for any
+	// realistic inflation without inflating VRAM use much.
+	NumCtx int `json:"num_ctx,omitempty"`
 }
+
+// localContextWindow is the prompt-context size we ask Ollama to allocate
+// for inflations. Way more than we need most of the time, but cheap
+// insurance against silent truncation that drops trailing skeleton rules.
+const localContextWindow = 16384
 
 type ollamaChatChunk struct {
 	Message struct {
@@ -91,7 +105,10 @@ func (o *Ollama) Stream(ctx context.Context, req Request) (<-chan string, error)
 		// cloud) but Promptism's 5 sections need ~1500 tokens of headroom
 		// to land cleanly. Bump the inflater's default 800 → 2000 for
 		// Ollama specifically. The cost is wall-clock time, not money.
-		Options: ollamaChatOptions{NumPredict: scaleNumPredictForLocal(req.MaxTokens)},
+		Options: ollamaChatOptions{
+			NumPredict: scaleNumPredictForLocal(req.MaxTokens),
+			NumCtx:     localContextWindow,
+		},
 	}
 	buf, _ := json.Marshal(body)
 
