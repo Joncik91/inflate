@@ -165,3 +165,25 @@ func TestParseSectionsRejectsRandomText(t *testing.T) {
 		t.Errorf("freeform text should not parse as sections, got %+v", got)
 	}
 }
+
+func TestParseSectionsHandlesBoldLabels(t *testing.T) {
+	// Smaller local models (gemma4, llama3) sometimes emit markdown bold
+	// around section labels. Parser must strip the decoration.
+	in := "**Role:** dev\n**Context:** working in repo X\n**Task:** fix bug\n**Constraints:** keep it simple\n**Output:** a diff"
+	got := parseSections(in)
+	if len(got) != 5 {
+		t.Fatalf("expected 5 sections, got %d (%+v)", len(got), got)
+	}
+	if got[4].Label != "Output" || got[4].Body != "a diff" {
+		t.Errorf("Output section wrong: %+v", got[4])
+	}
+}
+
+func TestParseSectionsHandlesHeadingLabels(t *testing.T) {
+	// Some models emit ## Heading style. Parser must strip.
+	in := "## Role: dev\n## Context: ctx\n## Task: t\n## Constraints: c\n## Output: o"
+	got := parseSections(in)
+	if len(got) != 5 {
+		t.Fatalf("expected 5 sections from ## headings, got %d", len(got))
+	}
+}
