@@ -1,8 +1,24 @@
 # Inflate
 
-*Inflate reads your Claude Code session context and turns a short fragment into a fully loaded prompt — without you having to re-explain your project every time. Works today. `go install` and run.*
+*Type a fragment. Get a context-loaded prompt for Claude Code.*
 
-Type a fragment in Inflate (Terminal B), get a context-loaded prompt for Claude Code (Terminal A).
+Inflate sits next to Claude Code and turns whatever you'd type — a fragment, a question, a half-formed thought — into a structured prompt loaded with your project's actual context (git, terminal history, recent Claude session). Works mid-session or from a cold start. Output lands on your clipboard, ready to paste.
+
+## Install
+
+```bash
+go install github.com/Joncik91/inflate@latest
+```
+
+## Quickstart
+
+1. Run `inflate`. The first launch walks you through a 5-question setup wizard (identity, work kind, style, provider, API key). It writes `~/.config/inflate/{profile,config}.toml` and `.env` (mode `0600`) — no shell sourcing required.
+2. Open `claude` in Terminal A. Run `inflate` in Terminal B.
+3. Type a fragment, press Enter, paste into Claude Code.
+
+## What it does
+
+Inflate reads your project state in parallel — git diff, shell history, files open in your editor, the latest Claude Code JSONL session, your profile, running dev tools — then asks an LLM to expand your fragment into a Promptism-shaped prompt (Role / Context / Task / Constraints / Output) using only that context.
 
 ```
 ┌────────────────────┐         ┌────────────────────┐
@@ -20,31 +36,7 @@ Type a fragment in Inflate (Terminal B), get a context-loaded prompt for Claude 
                                   Terminal A input
 ```
 
-## Install
-
-```bash
-go install github.com/Joncik91/inflate@latest
-```
-
-## Run it
-
-```bash
-inflate
-```
-
-That's it. The first launch walks you through a 5-question setup wizard:
-
-1. Who are you? (e.g. *senior backend engineer*)
-2. What kind of work? (e.g. *CLI tools*)
-3. Style preference? *terse / standard / verbose*
-4. Which LLM provider? *anthropic / deepseek / openai / google / custom*
-5. Paste your API key (input is hidden).
-
-The wizard creates `~/.config/inflate/{profile,config}.toml` and `.env` (mode `0600`). Every future launch reads them automatically — **no shell sourcing required, no `~/.bashrc` edits**. Real shell env vars still override `.env`, so CI keeps working.
-
-After setup: open `claude` in Terminal A, run `inflate` in Terminal B, type a fragment, press Enter, paste into Claude Code.
-
-## Subcommands
+## Commands & hotkeys
 
 | Command | Does |
 |---|---|
@@ -53,8 +45,6 @@ After setup: open `claude` in Terminal A, run `inflate` in Terminal B, type a fr
 | `inflate config` | Edit `config.toml` in `$EDITOR` |
 | `inflate config profile` | Edit `profile.toml` |
 | `inflate config env` | Edit `.env` (rotate keys, add a second provider) |
-
-## Hotkeys (TUI)
 
 | Key | Action |
 |---|---|
@@ -66,25 +56,15 @@ After setup: open `claude` in Terminal A, run `inflate` in Terminal B, type a fr
 
 The TUI streams the inflated prompt in as it arrives. While waiting for the first token a `⠹ Inflating…` spinner shows below the preview. Errors sit in a red banner until you type or press Esc — they don't flash by.
 
-## Top-level flags
-
 | Flag | Default | What |
 |---|---|---|
 | `--cwd PATH` | nearest `.git` ancestor of `$PWD`, else `$PWD` | Project dir to harvest |
 | `--paste-window N` | `0` (focused) | X11 window ID to auto-paste into (Linux only) |
 | `--force` | `false` | Override stale-lockfile detection |
 
-## API key resolution order
+## Provider config
 
-When inflate starts, it looks for the key in this order:
-
-1. **Real shell env var** (e.g. `DEEPSEEK_API_KEY`) — wins; CI uses this.
-2. **`~/.config/inflate/.env`** — what the wizard writes.
-3. **Inline `provider.api_key`** in `config.toml` — explicit override.
-
-If none resolves, inflate prints a clear error and points at `inflate doctor`.
-
-## Provider config examples
+Inflate resolves the API key in this order: real shell env var → `~/.config/inflate/.env` → inline `provider.api_key` in `config.toml`. CI just sets the env var.
 
 **Anthropic:**
 
@@ -126,10 +106,12 @@ Lists every startup check with `[✓]` / `[✗]`. Most "inflate keeps asking for
 
 ## Status
 
-v0.1.3 — plain-English status legend, streaming preview with spinner, `?` help overlay, persistent error banner, named-section preview rendering, prompt-quality fix for non-git directories.
+v0.1.3 — streaming preview, `?` help overlay, persistent error banner, named-section rendering, deeper context (untracked files, dev-tools detection, recent-files fallback, neighbor-repo hints, auto-promotion to repo root), downstream-assistant prompt framing.
 
 Built on v0.1.2 (session-aware JSONL picker), v0.1.1 (interactive setup, dotenv-backed keys, smart `--cwd`, lockfile self-cleanup, `doctor` + `config edit` subcommands), and v0 (TUI, BYOK, harvester, Promptism prompt skeleton).
 
 PTY wrapper for watch-as-you-type still deferred.
+
+## Learn more
 
 See `docs/superpowers/specs/2026-04-27-inflate-design.md` for the full design and the canonical deferred list.
