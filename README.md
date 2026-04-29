@@ -4,6 +4,8 @@
 
 Inflate sits next to Claude Code and turns whatever you'd type — a fragment, a question, a half-formed thought — into a structured prompt loaded with your project's actual context (git, terminal history, recent Claude session). Works mid-session or from a cold start. Output lands on your clipboard, ready to paste.
 
+https://github.com/user-attachments/assets/ada67a3f-c1b4-48d6-a74d-354ca3d35a40
+
 ## Install
 
 ```bash
