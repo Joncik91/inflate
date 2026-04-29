@@ -93,15 +93,17 @@ func main() {
 			_ = os.Setenv(setup.APIKeyName, setup.APIKeyValue)
 		}
 		profile = setup.Profile
-		fmt.Printf(`
-✓ profile saved to %s
-✓ config  saved to %s
-✓ key     saved to %s (mode 0600)
-
-Inflate will read these on every launch — no shell setup needed.
-To rotate the key later: inflate config edit env
-
-`, filepath.Join(config.ConfigDir(), "profile.toml"), cfgPath, filepath.Join(config.ConfigDir(), ".env"))
+		fmt.Printf("\n✓ profile saved to %s\n✓ config  saved to %s\n",
+			filepath.Join(config.ConfigDir(), "profile.toml"), cfgPath)
+		if setup.APIKeyValue != "" {
+			fmt.Printf("✓ key     saved to %s (mode 0600)\n", filepath.Join(config.ConfigDir(), ".env"))
+			fmt.Println("\nInflate will read these on every launch — no shell setup needed.")
+			fmt.Println("To rotate the key later: inflate config edit env")
+		} else {
+			fmt.Println("(no API key needed for this provider)")
+			fmt.Println("\nInflate will read these on every launch — no shell setup needed.")
+		}
+		fmt.Println()
 	} else if profile.Identity == "developer" && term.IsTerminal(int(os.Stdin.Fd())) {
 		// Profile missing but config exists — old v0 user; just collect a profile.
 		fmt.Println("Welcome to inflate. Three quick questions:")

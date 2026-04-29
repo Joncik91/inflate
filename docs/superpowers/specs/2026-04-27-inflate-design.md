@@ -21,7 +21,7 @@ The product embodies the **Promptism** methodology: every prompt should carry fu
 ## Non-Goals (v0)
 
 - Modifying the prompt inside Claude Code's input box (impossible today; `UserPromptSubmit` hooks cannot replace the prompt).
-- Native local-LLM provider (Ollama, llama.cpp). Local models that expose an OpenAI-compatible endpoint (e.g., vLLM, LocalAI, llama.cpp's server) work via `openai_compat` in v0.
+- ~~Native local-LLM provider (Ollama, llama.cpp).~~ Shipped in v0.1.4 as `kind = "ollama"`. llama.cpp users still go via `openai_compat` against the llama.cpp HTTP server.
 - PTY wrapper (deferred to v1).
 - Browser extension or web UI.
 - Cloud sync of profile or settings.
@@ -298,7 +298,6 @@ This is the **canonical deferred list**. PR descriptions point here instead of d
 ### v1 (architectural)
 
 - PTY wrapper (`inflate-claude`) for true watch-as-you-type in Claude Code's input box.
-- Local LLM provider (Ollama, llama.cpp).
 - Hook-based mode (when/if Anthropic ships prompt-replacement support).
 - WSL clipboard interop.
 - Remote Claude Code session (SSH'd into a server).
@@ -333,3 +332,4 @@ Items surfaced during implementation. No version commitment; they ship when ther
 - ✅ v0.1.3 — persistent error banner (errors no longer flash by as 1.5 s toasts).
 - ✅ v0.1.3 — named-section preview rendering (Role · Context · Task · …).
 - ✅ v0.1.3 — prompt-quality fix: skeleton rule that JSONL is exploration not fact, plus dropping recent user prompts from the JSONL summary (closed issue #4).
+- ✅ v0.1.4 — native Ollama provider. Wizard auto-detects a running daemon, lists chat-capable models with parameter sizes, skips the API-key prompt; doctor pings `/api/tags` instead of running a chat completion; factory loosens the API-key requirement for keyless local providers. (llama.cpp users continue to use `kind = "openai_compat"` against llama.cpp's server.)

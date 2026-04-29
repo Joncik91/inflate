@@ -31,10 +31,10 @@ type Config struct {
 
 // ProviderConfig selects and configures the LLM backend.
 type ProviderConfig struct {
-	Kind      string `toml:"kind"`        // "anthropic" | "openai_compat" | "google"
-	BaseURL   string `toml:"base_url"`    // openai_compat only
+	Kind      string `toml:"kind"`        // "anthropic" | "openai_compat" | "google" | "ollama"
+	BaseURL   string `toml:"base_url"`    // openai_compat or ollama (default: ollama → http://localhost:11434)
 	Model     string `toml:"model"`
-	APIKey    string `toml:"api_key"`     // inline; or use APIKeyEnv
+	APIKey    string `toml:"api_key"`     // inline; or use APIKeyEnv. Not required for ollama.
 	APIKeyEnv string `toml:"api_key_env"` // env var holding the key
 }
 
