@@ -3,6 +3,7 @@ package harvester
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // ContextBundle is the snapshot of harvested context published to the inflater.
@@ -29,6 +30,13 @@ type ContextBundle struct {
 	FileOK      bool `json:"-"`
 	JSONLOK     bool `json:"-"`
 	ProcessesOK bool `json:"-"`
+
+	// ShellAge is how long ago the shell history file was last modified
+	// at harvest time. Zero when the file is unknown or freshly written.
+	// Used by the TUI to flag "history may be stale" — bash flushes only
+	// on shell exit, so a long-lived terminal session leaves a stale
+	// history even while the user is busy typing.
+	ShellAge time.Duration `json:"-"`
 }
 
 // FlagsString renders the per-source flags for the TUI status line.

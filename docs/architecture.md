@@ -54,6 +54,32 @@ If the user launches inflate from a parent directory containing one git repo (e.
 
 Claude Code can have multiple sessions per project dir. The picker matches by `cwd + pid + status: active` instead of "newest file in dir," so concurrent sessions don't pollute each other.
 
+### Harvest boundaries
+
+Every collector is bounded so a single noisy source can't monopolise the LLM's context window. The caps are enforced at harvest time, before the bundle is published:
+
+| Source | Cap | What happens past the cap |
+|---|---|---|
+| `git diff --name-only` (modified) | 30 paths | rest folded into `… (N more)` marker |
+| `git diff --cached --name-only` (staged) | 30 paths | rest folded into `… (N more)` marker |
+| `git status` untracked | 10 paths | silently truncated |
+| `git diff --stat` | (compact summary, never raw diff content) | n/a |
+| Shell history | last 20 lines, dead-path-pruned | older lines dropped |
+| JSONL (Claude session) | 200 events scanned, ~4KB rendered | trailing `…(truncated)` marker |
+| Open-editor / recent files | 5 paths, paths only (no content) | rest dropped |
+| Processes | dev-tool allowlist only | non-dev procs ignored |
+
+The harvester never reads file content into the bundle — only metadata (paths, sizes, mtimes). The LLM sees what changed and where, but we don't ship raw bodies, so a 50MB binary diff or a 200K lockfile won't bloat the prompt.
+
+### Known limitations of the harvest
+
+A few things the harvester can't fix from outside the shell, surfaced honestly so the user knows what to trust:
+
+- **Shell history is read at flush time, not type time.** Bash only writes `~/.bash_history` on shell exit (or with `PROMPT_COMMAND="history -a"` configured). Zsh flushes per-command only with `INC_APPEND_HISTORY`. If the user's shell is long-lived and doesn't autoflush, the harvester sees commands from minutes-to-hours ago — the LLM may reason about a stale error. Inflate surfaces the file's mtime age in the status line as `Shell history may be stale (last write 12m ago)` when it exceeds 5 minutes, so the user knows to ignore the `<shell>` block or run `history -a` manually.
+- **Truncated file lists may hide the load-bearing change.** If a vendor bump modifies 200 files and the actual user-edit is at index 47, the LLM sees 30 paths + `(170 more)` and might miss it. The marker is deliberately prominent so the user knows the list was clipped — when this matters, narrow the seed (`fix the auth handler`, not `what changed?`).
+- **No diff content harvested.** We surface paths and `--stat` output, never `git diff --patch`. This caps token cost but means the LLM can't see the actual line-level changes. For "review my diff" workflows, paste the diff into the seed manually.
+- **Clipboard is overwritten on Enter.** Pressing `Enter` writes the inflated prompt to the clipboard unconditionally. There's no save/restore — if you had something on the clipboard you needed to paste elsewhere first, do that before pressing Enter.
+
 ## `internal/inflater` — prompt assembly + LLM call
 
 Tiny package: one file, one entry point.

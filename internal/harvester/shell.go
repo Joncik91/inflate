@@ -7,18 +7,30 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // CollectShell is the harvester hot path. Use DiagnoseShell when you need the
 // underlying error (e.g. `inflate doctor`).
 func CollectShell() (string, bool) {
-	out, ok, _ := DiagnoseShell()
+	out, _, ok, _ := DiagnoseShell()
 	return out, ok
 }
 
+// CollectShellWithAge returns the harvested shell history along with how
+// long ago the source file was last modified. Used by the bundler to
+// surface "history may be stale" warnings in the status line — bash only
+// flushes ~/.bash_history on shell exit, so a long-lived shell can leave
+// the file untouched even while the user is actively typing commands.
+func CollectShellWithAge() (text string, age time.Duration, ok bool) {
+	text, age, ok, _ = DiagnoseShell()
+	return
+}
+
 // DiagnoseShell returns the last ~20 lines of the user's shell history file,
-// ok flag, and the underlying error when no readable history is found.
-func DiagnoseShell() (string, bool, error) {
+// the file's mtime-age (zero when unknown), an ok flag, and the underlying
+// error when no readable history is found.
+func DiagnoseShell() (string, time.Duration, bool, error) {
 	candidates := []string{}
 	if h := os.Getenv("HISTFILE"); h != "" {
 		candidates = append(candidates, h)
@@ -38,14 +50,18 @@ func DiagnoseShell() (string, bool, error) {
 			continue
 		}
 		lines := tailLines(f, 20)
+		var age time.Duration
+		if info, err := f.Stat(); err == nil {
+			age = time.Since(info.ModTime())
+		}
 		f.Close()
 		lines = pruneStaleDirRefs(lines)
 		if len(lines) == 0 {
 			continue
 		}
-		return strings.Join(lines, "\n"), true, nil
+		return strings.Join(lines, "\n"), age, true, nil
 	}
-	return "", false, fmt.Errorf("no readable shell history in %v", candidates)
+	return "", 0, false, fmt.Errorf("no readable shell history in %v", candidates)
 }
 
 // pathRE captures path-like tokens in shell history. Matches:

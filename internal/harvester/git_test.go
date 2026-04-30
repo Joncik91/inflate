@@ -61,6 +61,23 @@ func TestCollectGitNotARepo(t *testing.T) {
 	}
 }
 
+func TestCapLines(t *testing.T) {
+	in := strings.Join([]string{"a", "b", "c", "d", "e"}, "\n")
+	if got := capLines(in, 10); got != in {
+		t.Errorf("under cap: got %q, want unchanged", got)
+	}
+	if got := capLines(in, 5); got != in {
+		t.Errorf("at cap: got %q, want unchanged", got)
+	}
+	got := capLines(in, 2)
+	if !strings.Contains(got, "(3 more)") {
+		t.Errorf("expected '(3 more)' marker in %q", got)
+	}
+	if !strings.HasPrefix(got, "a\nb\n") {
+		t.Errorf("expected first 2 lines preserved, got %q", got)
+	}
+}
+
 func TestCollectGitInRepo(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")

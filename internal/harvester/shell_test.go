@@ -6,13 +6,14 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDiagnoseShellNoFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	t.Setenv("HISTFILE", "")
-	_, ok, err := DiagnoseShell()
+	_, _, ok, err := DiagnoseShell()
 	if ok {
 		t.Errorf("expected ok=false when no history")
 	}
@@ -116,6 +117,30 @@ func TestPruneStaleDirRefsKeepsLinesWithoutPaths(t *testing.T) {
 	got := pruneStaleDirRefs(lines)
 	if len(got) < 3 {
 		t.Errorf("expected at least the 3 single-word lines preserved, got: %v", got)
+	}
+}
+
+func TestCollectShellWithAge(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("HOME redirect doesn't apply on Windows")
+	}
+	dir := t.TempDir()
+	hist := filepath.Join(dir, ".bash_history")
+	if err := os.WriteFile(hist, []byte("ls\ncd /tmp\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-30 * time.Minute)
+	if err := os.Chtimes(hist, old, old); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", dir)
+	t.Setenv("HISTFILE", "")
+	_, age, ok := CollectShellWithAge()
+	if !ok {
+		t.Fatal("expected ok=true")
+	}
+	if age < 25*time.Minute {
+		t.Errorf("expected age >= 25m, got %v", age)
 	}
 }
 

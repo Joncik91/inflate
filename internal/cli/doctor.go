@@ -120,7 +120,7 @@ func runDoctor(ping bool) string {
 		add(false, "harvester: git — "+flatErr(gErr), hint)
 	}
 
-	if _, ok, sErr := harvester.DiagnoseShell(); ok {
+	if _, _, ok, sErr := harvester.DiagnoseShell(); ok {
 		add(true, "harvester: shell history", "")
 	} else {
 		add(false, "harvester: shell history", flatErr(sErr))

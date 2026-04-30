@@ -116,8 +116,9 @@ func (h *Harvester) collectOnce() {
 
 	var wg sync.WaitGroup
 	var (
-		profile, git, shell, file, jsonl, procs                    string
-		profileOK, gitOK, shellOK, fileOK, jsonlOK, procsOK         bool
+		profile, git, shell, file, jsonl, procs            string
+		profileOK, gitOK, shellOK, fileOK, jsonlOK, procsOK bool
+		shellAge                                            time.Duration
 	)
 
 	wg.Add(6)
@@ -132,7 +133,7 @@ func (h *Harvester) collectOnce() {
 	}()
 	go func() {
 		defer wg.Done()
-		shell, shellOK = CollectShell()
+		shell, shellAge, shellOK = CollectShellWithAge()
 	}()
 	go func() {
 		defer wg.Done()
@@ -184,6 +185,7 @@ func (h *Harvester) collectOnce() {
 		FileOK:      fileOK,
 		JSONLOK:     jsonlOK,
 		ProcessesOK: procsOK,
+		ShellAge:    shellAge,
 	}
 	// Only scan for neighbor repos when the current cwd itself isn't a
 	// repo. After auto-promotion, gitOK may now be true, so this only

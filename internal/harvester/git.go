@@ -15,6 +15,13 @@ func CollectGit(dir string) (string, bool) {
 	return out, ok
 }
 
+// maxFileList caps how many file paths the harvester surfaces per category
+// (modified / staged). A vendor bump or auto-generated lockfile churn can
+// produce hundreds of paths, which would otherwise drown out everything
+// else in the LLM's view. 30 is enough to convey "lots changed" without
+// monopolising the context.
+const maxFileList = 30
+
 // DiagnoseGit returns context bundle text, ok flag, and the underlying error.
 // On success, error is nil. On failure, ok is false and error explains why.
 func DiagnoseGit(dir string) (string, bool, error) {
@@ -45,15 +52,28 @@ func DiagnoseGit(dir string) (string, bool, error) {
 		fmt.Fprintf(&sb, "diff stat:\n%s\n", stat)
 	}
 	if staged != "" {
-		fmt.Fprintf(&sb, "staged:\n%s\n", staged)
+		fmt.Fprintf(&sb, "staged:\n%s\n", capLines(staged, maxFileList))
 	}
 	if mods != "" {
-		fmt.Fprintf(&sb, "modified:\n%s\n", mods)
+		fmt.Fprintf(&sb, "modified:\n%s\n", capLines(mods, maxFileList))
 	}
 	if untracked := untrackedOnly(porcelain); untracked != "" {
 		fmt.Fprintf(&sb, "untracked:\n%s\n", untracked)
 	}
 	return sb.String(), true, nil
+}
+
+// capLines truncates a newline-separated list to n entries, appending a
+// "(N more)" marker so the LLM can see the list was clipped. The marker
+// matters: silent truncation can cause the model to act as if the list
+// were complete (e.g. "fix the only modified file" when 200 are modified).
+func capLines(s string, n int) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) <= n {
+		return s
+	}
+	kept := lines[:n]
+	return strings.Join(kept, "\n") + fmt.Sprintf("\n… (%d more)", len(lines)-n)
 }
 
 // untrackedOnly extracts just the untracked file paths from

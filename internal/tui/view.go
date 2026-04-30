@@ -3,10 +3,27 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// humanizeAge renders a duration as a coarse "Nm" / "Nh" / "Nd" string
+// for the status-line stale-history hint. Anything under a minute reads
+// as "<1m" so the line still fits on narrow terminals.
+func humanizeAge(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return "<1m"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(d.Hours())/24)
+	}
+}
 
 func (m Model) View() string {
 	// Lipgloss border-width handling: Width() on a style with Padding
@@ -260,6 +277,16 @@ func renderStatus(m Model) string {
 
 	if missing := m.bundle.MissingSources(); missing != "" && m.bundle.Severity() != "ok" {
 		out = out + "\n" + style.Render("Missing: "+missing)
+	}
+
+	// Stale-history warning. Bash flushes ~/.bash_history only on shell
+	// exit, so a long-lived terminal can leave the file untouched while
+	// the user is actively typing — the LLM ends up reasoning about
+	// commands that ran an hour ago. Surface the age so the user knows
+	// to take the shell context with a grain of salt.
+	if m.bundle.ShellOK && m.bundle.ShellAge >= 5*time.Minute {
+		hint := fmt.Sprintf("Shell history may be stale (last write %s ago)", humanizeAge(m.bundle.ShellAge))
+		out = out + "\n" + statusStyleWarn.Render(hint)
 	}
 
 	// Neighbor-repo hint: if we're in a parent dir with N child repos
