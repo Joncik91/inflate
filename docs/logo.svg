@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Inflate">
+  <title>Inflate</title>
+
+  <!--
+    Inflate — a TUI that takes a typed fragment and expands it into a
+    structured, context-loaded prompt.
+
+    Mark: the unix prompt chevron ❯ on the left (the fragment the user
+    types) cascades into three amber bars on the right (the inflated,
+    structured prompt). The bars vary in length and reference a real
+    document's rhythm — heading, paragraph, code or bullet — so the
+    silhouette reads as content, not as a loader animation.
+
+    Substrate matches the portfolio: dark panel #0E0E0F, single amber
+    accent #E8954A, rx=48 corners.
+  -->
+
+  <rect width="400" height="400" rx="48" fill="#0E0E0F"/>
+
+  <!--
+    The chevron. Built as one stroked path so the corner is one mitre
+    join, not two endpoints meeting awkwardly. Square caps to keep the
+    glyph mechanical — this is a CLI prompt, not a friendly arrow.
+
+    Geometry:
+      vertex at (152, 200) — the chevron's tip, optically just-left-of-centre
+      upper arm rises to (84, 132)  — 45° back-up-left
+      lower arm descends to (84, 268) — 45° back-down-left
+
+    Stroke width 30 on a 400-canvas (7.5%) — thick enough to survive a
+    32px favicon, thin enough that the chevron doesn't fight the bars.
+  -->
+  <g fill="none" stroke="#E8954A" stroke-width="30"
+     stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M 84 132 L 152 200 L 84 268"/>
+  </g>
+
+  <!--
+    The three structured bars. The chevron's tip at x=152 is the spring
+    from which they fan. Each bar starts at x=192 (a 40-unit gap from
+    the chevron's tip — readable as a deliberate space, not as a touch),
+    has rounded right caps, and varies in length to suggest a real
+    document's rhythm.
+
+    Bar order top-to-bottom:
+      1. Short bar at y=140  — width 88   (a heading)
+      2. Long bar  at y=192  — width 152  (a paragraph, the dominant mass)
+      3. Mid bar   at y=244  — width 116  (a bullet or code line)
+
+    The 4-unit gap above the centred bar from the longer bar's right
+    edge, and the rhythm of short → long → medium, is what makes the
+    silhouette read as "structured content" rather than three lines.
+    A flat ascending or descending stack would read as a loader; this
+    rhythm reads as a prose paragraph.
+  -->
+  <g stroke="#E8954A" stroke-width="22" stroke-linecap="round">
+    <line x1="192" y1="140" x2="280" y2="140"/>
+    <line x1="192" y1="200" x2="344" y2="200"/>
+    <line x1="192" y1="260" x2="308" y2="260"/>
+  </g>
+</svg>
