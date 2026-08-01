@@ -98,7 +98,7 @@ func runProvider(scanner *bufio.Scanner, w io.Writer, keys KeyReader) (config.Pr
 		// keyName stays empty — Ollama needs no API key.
 	case "a", "anthropic":
 		prov.Kind = "anthropic"
-		prov.Model = askWithScanner(scanner, w, "Model? (e.g. claude-haiku-4-5, claude-sonnet-4-6, claude-opus-4-7)")
+		prov.Model = askWithScanner(scanner, w, "Model? (e.g. claude-haiku-4-5, claude-sonnet-5, claude-opus-5)")
 		keyName = "ANTHROPIC_API_KEY"
 	case "d", "deepseek":
 		prov.Kind = "openai_compat"

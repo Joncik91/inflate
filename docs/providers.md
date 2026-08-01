@@ -25,7 +25,7 @@ model       = "claude-haiku-4-5"
 api_key_env = "ANTHROPIC_API_KEY"
 ```
 
-Recommended models: `claude-haiku-4-5` (fastest, cheapest), `claude-sonnet-4-6` (balanced), `claude-opus-4-7` (most capable).
+Recommended models: `claude-haiku-4-5` (fastest, cheapest), `claude-sonnet-5` (balanced), `claude-opus-5` (most capable).
 
 ## DeepSeek / Groq / OpenRouter / Together / vLLM (OpenAI-compatible)
 
