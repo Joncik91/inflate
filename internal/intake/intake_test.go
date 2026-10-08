@@ -43,7 +43,7 @@ func TestRunFromReaderNormalisesStyle(t *testing.T) {
 
 func TestRunFullSetupAnthropic(t *testing.T) {
 	stubProbe(t, nil, false)
-	in := strings.NewReader("dev\nstuff\nstandard\na\nclaude-haiku-4-5\n")
+	in := strings.NewReader("dev\nstuff\nstandard\na\nclaude-haiku-5-5\n")
 	keys := &stubKeyReader{key: "sk-ant-test"}
 	var out strings.Builder
 	r, err := RunFullSetup(in, &out, keys)
@@ -56,7 +56,7 @@ func TestRunFullSetupAnthropic(t *testing.T) {
 	if r.Provider.Kind != "anthropic" {
 		t.Errorf("kind = %q, want anthropic", r.Provider.Kind)
 	}
-	if r.Provider.Model != "claude-haiku-4-5" {
+	if r.Provider.Model != "claude-haiku-5-5" {
 		t.Errorf("model = %q", r.Provider.Model)
 	}
 	if r.Provider.APIKeyEnv != "ANTHROPIC_API_KEY" {
@@ -200,7 +200,7 @@ func TestRunProviderOnlyOllama(t *testing.T) {
 func TestRunProviderOnlyAnthropic(t *testing.T) {
 	stubProbe(t, nil, false)
 
-	in := strings.NewReader("a\nclaude-haiku-4-5\n")
+	in := strings.NewReader("a\nclaude-haiku-5-5\n")
 	var out strings.Builder
 	prov, keyName, keyVal, err := RunProviderOnly(in, &out, &stubKeyReader{key: "sk-ant"})
 	if err != nil {

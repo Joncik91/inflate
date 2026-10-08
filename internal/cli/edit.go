@@ -84,7 +84,7 @@ func templateFor(basename string) string {
 
 [provider]
 kind        = "anthropic"           # or "openai_compat" / "google" / "ollama"
-model       = "claude-haiku-4-5"
+model       = "claude-haiku-5-5"
 api_key_env = "ANTHROPIC_API_KEY"
 `
 	case "profile.toml":

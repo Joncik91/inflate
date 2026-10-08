@@ -200,7 +200,7 @@ func TestCycleProviderOllamaUnreachable(t *testing.T) {
 	cfg := config.Config{
 		Provider: config.ProviderConfig{
 			Kind:      "anthropic",
-			Model:     "claude-haiku-4-5",
+			Model:     "claude-haiku-5-5",
 			APIKeyEnv: "ANTHROPIC_API_KEY",
 		},
 	}
