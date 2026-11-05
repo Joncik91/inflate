@@ -1,0 +1,7 @@
+go test fuzz v1
+int(13)
+int(1300)
+string("`")
+string("")
+string("secret")
+uint32(17)

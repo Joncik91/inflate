@@ -1,0 +1,10 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "synthetic secret-shaped fixtures in scrubber tests (40 gitleaks findings, all in test files)"
+paths = [
+  '''internal/harvester/scrubber_test\.go''',
+  '''internal/harvester/scrubfuzz_test\.go''',
+  '''internal/harvester/scrubfuzz_shapes_test\.go''',
+]

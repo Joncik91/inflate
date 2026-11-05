@@ -7,3 +7,4 @@ inflate.exe
 .envrc
 .env
 coverage.out
+state/

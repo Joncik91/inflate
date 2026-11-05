@@ -1,0 +1,7 @@
+go test fuzz v1
+int(3)
+int(500)
+string("\"")
+string("")
+string("password")
+uint32(15)

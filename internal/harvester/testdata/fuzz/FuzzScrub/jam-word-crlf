@@ -1,0 +1,7 @@
+go test fuzz v1
+int(17)
+int(100)
+string("prefixword")
+string("\r\n")
+string("PGPASSWORD")
+uint32(5)

@@ -1,0 +1,7 @@
+go test fuzz v1
+int(30)
+int(800)
+string("the value is ")
+string(",")
+string("client_secret")
+uint32(8)

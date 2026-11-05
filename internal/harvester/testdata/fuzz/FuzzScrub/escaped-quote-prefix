@@ -1,0 +1,7 @@
+go test fuzz v1
+int(23)
+int(1400)
+string("\\\"")
+string("")
+string("auth")
+uint32(18)

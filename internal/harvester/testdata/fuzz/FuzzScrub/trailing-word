@@ -1,0 +1,7 @@
+go test fuzz v1
+int(43)
+int(1550)
+string("")
+string(" word")
+string("pat")
+uint32(20)

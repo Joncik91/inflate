@@ -1,0 +1,7 @@
+go test fuzz v1
+int(70)
+int(1670)
+string(".")
+string(")")
+string("api_key2")
+uint32(12)

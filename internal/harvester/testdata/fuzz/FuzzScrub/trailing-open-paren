@@ -1,0 +1,7 @@
+go test fuzz v1
+int(33)
+int(1500)
+string("")
+string("(")
+string("credential")
+uint32(19)
